@@ -5,6 +5,7 @@
   python main.py --onebot        QQ 群聊模式（OneBot v11 / NapCat 等）
   python main.py --telegram      Telegram 群聊模式（长轮询）
   python main.py --inspect       记忆管理台
+  python main.py --edit-persona  人格卡修改器（本地网页：滑条调参/酒馆卡导入/热重载）
   python main.py --reembed       切换嵌入模型后补齐存量向量
   python main.py --export [文件] 导出记忆库备份 JSON（不含嵌入）
   python main.py --import 文件   从备份恢复（按 id 合并，嵌入用 --reembed 重建）
@@ -36,6 +37,11 @@ def _build_parser() -> argparse.ArgumentParser:
                    help="导出记忆库备份 JSON（缺省为 data/export_日期.json）")
     p.add_argument("--import", dest="import_path", metavar="文件",
                    help="从备份 JSON 恢复记忆库")
+    p.add_argument("--edit-persona", dest="edit_persona", nargs="?",
+                   const="config", metavar="卡文件",
+                   help="启动人格卡修改器（本地网页）；缺省编辑 config 指向的角色卡")
+    p.add_argument("--port", type=int, default=8765,
+                   help="人格卡修改器端口（默认 8765）")
     p.add_argument("--init", action="store_true", help="生成 config.yaml 与 .env 模板")
     return p
 
@@ -97,6 +103,22 @@ def main() -> None:
     if args.init:
         _cmd_init()
         return
+    if args.edit_persona is not None:
+        path = args.edit_persona
+        if path == "config":
+            try:
+                cfg = _load(args)
+                path = cfg.persona_file
+            except SystemExit:
+                path = "personas/default.yaml"
+                print("[提示] 未找到 config.yaml，默认编辑 personas/default.yaml")
+        card_path = Path(path)
+        if not card_path.is_absolute():
+            card_path = ROOT / card_path
+        from editor.server import run_editor
+
+        run_editor(card_path, args.port)
+        return
     cfg = _load(args)
 
     if args.import_path:
@@ -135,7 +157,8 @@ async def _build_pipeline(cfg, mock: bool):
     chat = MockChatClient() if mock else LLMChatClient(cfg)
     embedder = HashEmbedder() if mock else create_embedder(cfg)
     persona = PersonaCard.load_yaml(cfg.persona_file)
-    pipeline = BotPipeline(store, chat, embedder, persona, cfg, clock)
+    pipeline = BotPipeline(store, chat, embedder, persona, cfg, clock,
+                           persona_file=cfg.persona_file)
     return pipeline, store
 
 

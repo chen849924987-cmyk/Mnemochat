@@ -101,6 +101,19 @@ python main.py --import 备份.json    # 按 id 合并恢复
 python main.py --reembed             # 恢复后重建向量（切换嵌入模型后同样用它）
 ```
 
+## 人格卡修改器
+
+```bash
+python main.py --edit-persona                        # 编辑 config 指向的角色卡
+python main.py --edit-persona personas/deepseek_whale.yaml
+```
+
+本地网页 UI（零依赖，仅监听 127.0.0.1）：核心人格/说话风格/口头禅编辑、**性格参数 0-10 滑条**（注入 prompt 作为分寸参考）、知识边界开关、最终 system prompt 实时预览；**保存即热重载**——运行中的机器人下一条消息就换人格，无需重启。
+
+**导入 SillyTavern（酒馆）角色卡**：修改器支持直接上传 chub.ai 等站点下载的 PNG 卡（内嵌 JSON）或 V1/V2/V3 JSON，自动映射为本项目人格卡（[V2 规范](https://github.com/malfoyslastname/character-card-spec-v2) / [V3 规范](https://github.com/kwaroran/character-card-spec-v3)）。依赖工具调用的设定（表情包、发说说、联网搜索）暂不支持，导入后请人工检查。
+
+内置示例卡：`personas/default.yaml`（小满）、`personas/dafeiyu.yaml`（大肥鱼·DeepSeek 娘）、`personas/deepseek_whale.yaml`（DeepSeek 小鲸鱼·QQ 群友版，去AI味铁律+梗生态+示例对话，OneBot 适配器已支持"一条一行"自动拆条发送）。
+
 ## 人格漂移检测
 
 每次巩固后，抽样机器人近期发言与角色卡比对（评审模型打贴合度分）。判定漂移（客服腔、AI 助手腔、风格突变）时：
@@ -163,16 +176,17 @@ adapter/           平台适配层：QQ OneBot v11（正向 WS）· Telegram（�
 chat/              llm 客户端、mock 后端、群聊行为策略、回复主管线（多群安全）
 memory/            schema/store/ingest/consolidate/recall/decay
 embed/             api / local / mock 三通道嵌入
-persona/           角色卡、人格守卫（知识边界/注入格式）、漂移检测
+persona/           角色卡、人格守卫（知识边界/注入格式）、漂移检测、酒馆卡转换
+editor/            人格卡修改器（本地网页：滑条调参/卡导入/预览/热重载）
 sim/               控制台模拟器、记忆管理台、表格渲染
-personas/          角色卡（default.yaml）
-tests/             58 个离线测试（衰减/入库/检索/巩固/人格/漂移/多群/适配器/导出/端到端验收）
+personas/          角色卡（default 小满 / dafeiyu 大肥鱼 / deepseek_whale 小鲸鱼）
+tests/             69 个离线测试（衰减/入库/检索/巩固/人格/漂移/多群/适配器/卡转换/导出/端到端验收）
 ```
 
 ## 测试
 
 ```bash
-python -m pytest tests/ -q      # 58 passed，全程离线
+python -m pytest tests/ -q      # 69 passed，全程离线
 ```
 
 验收用例 `tests/test_e2e_acceptance.py::test_remember_allergy_after_two_weeks`：说过过敏 → 快进 14 天 → 清空对话窗口 → 相关话题时以"约两周前"的口吻召回，且召回强化生效。
@@ -183,8 +197,10 @@ python -m pytest tests/ -q      # 58 passed，全程离线
 - [x] Telegram 适配器（getUpdates 长轮询，无需公网）
 - [x] 人格漂移检测（巩固时抽样评审 + 角色校准提醒闭环）
 - [x] 记忆导出/导入（备份迁移，`--export` / `--import`）
+- [x] 人格卡修改器（网页滑条调参 + SillyTavern 卡导入 + 热重载）
 - [ ] `visibility: self` 的机器人自我反思记忆
 - [ ] Discord 适配器、多角色多群管理台、记忆可视化面板
+- [ ] 表情包/说说/联网搜索等工具调用（角色卡中此类设定已预留位置）
 
 > ⚠️ 合规提示：非官方 QQ 协议实现（NapCat 等）存在违反腾讯服务条款导致账号风控的风险，请自行评估并使用小号。本仓库不包含任何协议实现，仅作为 OneBot 11 标准客户端。
 

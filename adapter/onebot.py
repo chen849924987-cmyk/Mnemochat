@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import random
 import re
 from typing import TYPE_CHECKING
 
@@ -128,6 +129,15 @@ def build_reply_segments(reply_text: str, at_qq: str | None, at_sender: bool) ->
     return segments
 
 
+def split_reply(reply: str, max_parts: int = 5) -> list[str]:
+    """按行拆成多条消息（角色卡常见的'一条一行'铁律）；
+    超过 max_parts 时多余行合并进最后一条，防刷屏。"""
+    parts = [line.strip() for line in reply.splitlines() if line.strip()]
+    if len(parts) > max_parts:
+        parts = parts[: max_parts - 1] + [" ".join(parts[max_parts - 1 :])]
+    return parts or [reply]
+
+
 class OneBotV11Adapter(GroupChatAdapter):
     def __init__(self, pipeline: "BotPipeline", cfg: "BotConfig", clock: "Clock") -> None:
         super().__init__(pipeline, cfg, clock)
@@ -186,15 +196,21 @@ class OneBotV11Adapter(GroupChatAdapter):
                     force_reply=gm.mentioned_bot,
                 )
                 if reply:
-                    payload = {
-                        "action": "send_group_msg",
-                        "params": {
-                            "group_id": int(gm.group_id),
-                            "message": build_reply_segments(
-                                reply, gm.user_id, self.cfg.onebot.at_sender_on_reply
-                            ),
-                        },
-                    }
-                    await ws.send(json.dumps(payload, ensure_ascii=False))
+                    # 按行拆成多条消息：第一条 @ 发送者，其余纯文本；
+                    # 条间随机小延迟，模拟真人打字节奏（也降低风控风险）
+                    for i, part in enumerate(split_reply(reply)):
+                        if i:
+                            await asyncio.sleep(random.uniform(0.4, 1.2))
+                        payload = {
+                            "action": "send_group_msg",
+                            "params": {
+                                "group_id": int(gm.group_id),
+                                "message": build_reply_segments(
+                                    part, gm.user_id,
+                                    self.cfg.onebot.at_sender_on_reply and i == 0,
+                                ),
+                            },
+                        }
+                        await ws.send(json.dumps(payload, ensure_ascii=False))
             except Exception:
                 log.exception("处理群 %s 消息失败：%s", gm.group_id, gm.text[:50])

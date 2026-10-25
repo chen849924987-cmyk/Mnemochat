@@ -63,7 +63,8 @@ async def run_sim(cfg: BotConfig, mock: bool = False, config_path: str = "config
     chat = MockChatClient() if mock else LLMChatClient(cfg)
     embedder = HashEmbedder() if mock else create_embedder(cfg)
     persona = PersonaCard.load_yaml(cfg.persona_file)
-    pipe = BotPipeline(store, chat, embedder, persona, cfg, clock)
+    pipe = BotPipeline(store, chat, embedder, persona, cfg, clock,
+                       persona_file=cfg.persona_file)
 
     console = Console()
     mode = "[yellow]MOCK 离线[/]" if mock else "[green]API[/]"

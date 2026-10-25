@@ -6,7 +6,17 @@ from adapter.onebot import (
     extract_self_id,
     parse_group_message,
     segments_to_text,
+    split_reply,
 )
+
+
+def test_split_reply_one_line_per_message():
+    assert split_reply("一句话") == ["一句话"]
+    assert split_reply("第一行\n\n第二行\n第三行") == ["第一行", "第二行", "第三行"]
+    # 超过上限：多余行合并进最后一条，防刷屏
+    parts = split_reply("\n".join(f"第{i}行" for i in range(8)), max_parts=5)
+    assert len(parts) == 5 and "第7行" in parts[-1]
+    assert split_reply("  \n  ") == ["  \n  "]  # 全空则原样返回
 
 
 def _event(message, **over):

@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from chat.behavior import Behavior
@@ -35,13 +37,20 @@ log = logging.getLogger(__name__)
 class BotPipeline:
     def __init__(self, store: "MemoryStore", chat: "ChatBackend",
                  embedder: "EmbeddingProvider", persona: "PersonaCard",
-                 cfg: "BotConfig", clock: "Clock") -> None:
+                 cfg: "BotConfig", clock: "Clock",
+                 persona_file: str | Path | None = None) -> None:
         self.store = store
         self.chat = chat
         self.embedder = embedder
         self.persona = persona
         self.cfg = cfg
         self.clock = clock
+        # 人格卡热重载：修改器保存后，下一条消息自动生效（人格永远在线更新）
+        self.persona_file = Path(persona_file) if persona_file else None
+        self._persona_mtime = (
+            self.persona_file.stat().st_mtime
+            if self.persona_file and self.persona_file.exists() else None
+        )
 
         self.ingestor = Ingestor(store, chat, embedder, cfg, clock)
         self.recaller = Recaller(store, embedder, cfg, clock)
@@ -64,6 +73,7 @@ class BotPipeline:
 
     async def on_user_message(self, group_id: str, user_id: str, user_name: str,
                               content: str, *, force_reply: bool = False) -> str | None:
+        self._maybe_reload_persona()
         now = self.clock.now()
         msg_id = await self.store.add_message(group_id, user_id, user_name, content, now)
         msg = MessageRecord(id=msg_id, group_id=group_id, user_id=user_id,
@@ -76,6 +86,30 @@ class BotPipeline:
 
         self._schedule_ingest(group_id)
         return reply
+
+    def _maybe_reload_persona(self) -> None:
+        """角色卡文件变化 → 热重载人格与唤醒词。"""
+        if not self.persona_file or not self.persona_file.exists():
+            return
+        try:
+            mtime = self.persona_file.stat().st_mtime
+        except OSError:
+            return
+        if mtime == self._persona_mtime:
+            return
+        self._persona_mtime = mtime
+        try:
+            from persona.card import PersonaCard
+
+            self.persona = PersonaCard.load_yaml(self.persona_file)
+            self.behavior = Behavior(self.cfg.behavior, [self.persona.name])
+            self._drift = (DriftDetector(self.store, self.chat, self.persona,
+                                         self.cfg, self.clock)
+                           if self.cfg.drift.enabled and self._drift is not None
+                           else self._drift)
+            log.info("人格卡已热重载：%s", self.persona.name)
+        except Exception:
+            log.exception("人格卡热重载失败，沿用旧版本")
 
     async def _reply(self, group_id: str, trigger: MessageRecord) -> str:
         now = self.clock.now()

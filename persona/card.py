@@ -35,6 +35,10 @@ class PersonaCard(BaseModel):
     memory_stance: str = ""
     boundary: PersonaBoundary = PersonaBoundary()
     system_extra: str = ""
+    # 数值化人格参数（0-10）：修改器滑条可调，注入 prompt 供模型把握分寸
+    parameters: dict[str, float] = Field(default_factory=dict)
+    greeting: str = ""       # 入群/初次见面问候
+    source_notes: str = ""   # 来源备注（如导入自 SillyTavern 卡）
 
     @classmethod
     def load_yaml(cls, path: str | Path) -> "PersonaCard":
@@ -66,6 +70,15 @@ class PersonaCard(BaseModel):
             parts.append(f"【说话风格】{self.speech_style.strip()}")
         if self.catchphrases:
             parts.append("【口头禅】" + "、".join(self.catchphrases))
+        if self.parameters:
+            lines = ["【性格参数】（把握分寸用，自然融入言行，绝不向用户报数字）"]
+            for key, value in self.parameters.items():
+                try:
+                    v = min(10.0, max(0.0, float(value)))
+                except (TypeError, ValueError):
+                    continue
+                lines.append(f"- {key}：{v:.0f}/10")
+            parts.append("\n".join(lines))
         if self.system_extra:
             parts.append(self.system_extra.strip())
         parts.append(f"【当前环境】你在群聊（{group_id}）中，现在是 {fmt_ts(now_ts)}。")
