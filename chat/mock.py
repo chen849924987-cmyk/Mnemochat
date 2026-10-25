@@ -54,8 +54,14 @@ class MockChatClient:
             items = re.findall(r"^- (.+)$", user, flags=re.MULTILINE)
             return {"summary": f"综合观察：{'；'.join(items)}", "keywords": ["综合"]}
         if "角色一致性" in system:
-            # 漂移评审：出现 AI 助手腔即判漂移
-            if re.search(r"AI助手|作为AI|为您服务|很乐意帮助", user):
+            # 漂移评审：先查角色卡黑名单词，再查通用 AI 助手腔
+            reply_section = user.split("【最近发言】")[-1]
+            m = re.search(r"AI味黑名单[^\n]*】\s*\n(.+)", system)
+            terms = [t.strip() for t in re.split(r"[、,，]", m.group(1))] if m else []
+            if any(t and t in reply_section for t in terms):
+                return {"adherence": 4, "drifted": True,
+                        "issues": ["命中AI味黑名单"], "suggestion": "去掉黑名单式表达，回到角色口吻"}
+            if re.search(r"AI助手|作为AI|为您服务|很乐意帮助", reply_section):
                 return {"adherence": 3, "drifted": True,
                         "issues": ["客服/AI助手腔"], "suggestion": "回到群友口吻"}
             return {"adherence": 9, "drifted": False, "issues": [], "suggestion": ""}

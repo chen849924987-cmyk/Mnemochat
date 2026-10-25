@@ -41,6 +41,19 @@ def test_deepseek_whale_card_loads():
     assert "AI味黑名单" in prompt
     assert "傲娇：9/10" in prompt
     assert "一行" in prompt
+    # 漂移检测用的黑名单也在卡上
+    assert "首先" in card.ai_flavor_blocklist and len(card.ai_flavor_blocklist) >= 5
+
+
+async def test_check_command_offline(tmp_path, cfg, capsys):
+    """--check 体检：离线项全部通过。"""
+    from main import _cmd_check
+
+    cfg.database = str(tmp_path / "check.db")
+    failures = await _cmd_check(cfg, mock=True)
+    assert failures == 0
+    out = capsys.readouterr().out
+    assert "角色卡" in out and "数据库" in out and "全部通过" in out
 
 
 async def test_persona_hot_reload(store, chat, embedder, cfg, clock, tmp_path):

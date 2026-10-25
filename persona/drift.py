@@ -74,12 +74,16 @@ class DriftDetector:
             f"说话风格：{self.persona.speech_style}" if self.persona.speech_style else "",
             f"口头禅：{'、'.join(self.persona.catchphrases)}" if self.persona.catchphrases else "",
         ]))
+        system = DRIFT_SYSTEM
+        if self.persona.ai_flavor_blocklist:
+            system += ("\n\n【该角色的AI味黑名单——发言中出现任一即判漂移】\n"
+                       + "、".join(self.persona.ai_flavor_blocklist))
         user = (
             f"【角色设定】\n{persona_desc}\n\n"
             f"【最近发言】\n" + "\n".join(f"{i + 1}. {t}" for i, t in enumerate(replies))
         )
         try:
-            verdict = await self.chat.extract_json(DRIFT_SYSTEM, user)
+            verdict = await self.chat.extract_json(system, user)
         except Exception:
             log.exception("人格漂移检测调用失败，本轮跳过")
             return DriftReport(ts=now, skipped=True, sample_size=len(replies))

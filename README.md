@@ -70,6 +70,7 @@ python main.py --sim --mock
 # 接真实 API
 python main.py --init            # 生成 config.yaml 与 .env
 # 编辑 .env 填入 DEEPSEEK_API_KEY、SILICONFLOW_API_KEY（或其他 OpenAI 兼容端点）
+python main.py --check           # 启动体检：角色卡/数据库/分词/API 连通性
 python main.py --sim
 ```
 
@@ -120,7 +121,7 @@ python main.py --edit-persona personas/deepseek_whale.yaml
 - 报告落库（`drift_reports` 表，人格健康趋势可查）
 - 自动把"角色校准提醒"注入后续回复的 system prompt，直到下一轮检测恢复
 
-这是"人格存活"的最后防线：记忆系统保住了它知道什么，漂移检测保住它是谁。`drift.enabled: false` 可关闭。
+这是"人格存活"的最后防线：记忆系统保住了它知道什么，漂移检测保住它是谁。角色卡的 `ai_flavor_blocklist`（AI 味黑名单，小鲸鱼卡内置 12 条）会自动进入评审标准——卡面上的"出现即失败"变成自动告警。`drift.enabled: false` 可关闭。
 
 两分钟看懂它怎么"活"：
 

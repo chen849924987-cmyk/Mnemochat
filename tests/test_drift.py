@@ -41,6 +41,21 @@ async def test_drift_skips_insufficient_samples(store, chat, embedder, cfg, cloc
     assert await store.latest_drift_report() is None
 
 
+async def test_drift_blocklist_from_card(store, chat, embedder, cfg, clock, persona):
+    """角色卡的 AI 味黑名单进入评审标准：出现即判漂移。"""
+    persona.ai_flavor_blocklist = ["首先", "综上所述"]
+    for i in range(4):
+        await store.add_message(
+            "g1", persona.name, persona.name,
+            f"首先我们来看第{i}点，综上所述就是这样", clock.now()
+        )
+    det = DriftDetector(store, chat, persona, cfg, clock)
+    report = await det.check()
+    assert not report.skipped
+    assert report.drifted
+    assert any("黑名单" in issue for issue in report.issues)
+
+
 async def test_pipeline_reanchor_loop(store, chat, embedder, cfg, clock, persona):
     """漂移 → 注入校准提醒 → 恢复后撤销。"""
     cfg.drift.sample_size = 4

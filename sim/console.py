@@ -70,7 +70,10 @@ async def run_sim(cfg: BotConfig, mock: bool = False, config_path: str = "config
     mode = "[yellow]MOCK 离线[/]" if mock else "[green]API[/]"
     console.print(f"\n[bold]群聊记忆机器人[/] · {mode} · 群 [cyan]{cfg.sim_group_id}[/] "
                   f"· 角色 [magenta]{persona.name}[/] · 嵌入 {embedder.name} · 库 {cfg.database}")
-    console.print("输入 [bold]名字: 消息[/] 发言，[bold]/help[/] 查看命令。\n")
+    console.print("输入 [bold]名字: 消息[/] 发言，[bold]/help[/] 查看命令。")
+    if persona.greeting:
+        console.print(f"[magenta]{persona.name}[/]: {persona.greeting}")
+    console.print("")
 
     shown_mem_ids: set[int] = set()
 

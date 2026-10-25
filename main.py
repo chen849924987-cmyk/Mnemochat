@@ -4,6 +4,7 @@
   python main.py --sim [--mock]  控制台群聊模拟器（--mock 完全离线）
   python main.py --onebot        QQ 群聊模式（OneBot v11 / NapCat 等）
   python main.py --telegram      Telegram 群聊模式（长轮询）
+  python main.py --check [--mock]  启动体检：角色卡/数据库/分词/API 连通性逐项验证
   python main.py --inspect       记忆管理台
   python main.py --edit-persona  人格卡修改器（本地网页：滑条调参/酒馆卡导入/热重载）
   python main.py --reembed       切换嵌入模型后补齐存量向量
@@ -31,6 +32,8 @@ def _build_parser() -> argparse.ArgumentParser:
                    help="QQ 群聊模式：作为 OneBot v11 正向 WS 客户端接入（NapCat/LLOneBot/Lagrange）")
     p.add_argument("--telegram", action="store_true",
                    help="Telegram 群聊模式：getUpdates 长轮询（无需公网）")
+    p.add_argument("--check", action="store_true",
+                   help="启动体检：角色卡/数据库/分词/LLM/嵌入逐项验证（--mock 跳过 API 检查）")
     p.add_argument("--inspect", action="store_true", help="记忆管理台")
     p.add_argument("--reembed", action="store_true", help="为当前嵌入模型补齐存量向量")
     p.add_argument("--export", nargs="?", const="auto", metavar="文件",
@@ -127,6 +130,8 @@ def main() -> None:
         asyncio.run(_cmd_export(cfg, args.export))
     elif args.reembed:
         asyncio.run(_cmd_reembed(cfg))
+    elif args.check:
+        sys.exit(asyncio.run(_cmd_check(cfg, mock=args.mock)))
     elif args.onebot:
         asyncio.run(_run_adapter(cfg, mock=args.mock, kind="onebot"))
     elif args.telegram:
@@ -139,6 +144,85 @@ def main() -> None:
         from sim.console import run_sim
 
         asyncio.run(run_sim(cfg, mock=args.mock, config_path=args.config))
+
+
+async def _cmd_check(cfg, mock: bool) -> int:
+    """启动体检：返回失败项数（0 = 一切就绪）。"""
+    import time as _time
+
+    from chat.llm import LLMChatClient
+    from embed.base import create_embedder
+    from memory.store import MemoryStore
+    from persona.card import PersonaCard
+    from util.text import seg
+
+    failures = 0
+
+    def report(name: str, passed: bool, detail: str = "") -> None:
+        nonlocal failures
+        mark = "✓" if passed else "✗"
+        suffix = f" —— {detail}" if detail else ""
+        print(f"  [{mark}] {name}{suffix}")
+        if not passed:
+            failures += 1
+
+    print(f"Mnemochat 启动体检{'' if mock else '（含 API 连通性检查）'}")
+
+    try:
+        persona = PersonaCard.load_yaml(cfg.persona_file)
+        report("角色卡", True,
+               f"{persona.name} · 性格参数 {len(persona.parameters)} 项 · "
+               f"黑名单 {len(persona.ai_flavor_blocklist)} 条")
+    except Exception as e:
+        report("角色卡", False, str(e))
+
+    try:
+        store = MemoryStore(cfg.database)
+        await store.init()
+        stats = await store.stats()
+        total_mem = sum(stats["stage"].values())
+        report("数据库（含 FTS5）", True,
+               f"{cfg.database} · 记忆 {total_mem} 条 · 消息 {stats['messages']} 条 · "
+               f"嵌入模型 {list(stats['embeddings']) or '无'}")
+        await store.close()
+    except Exception as e:
+        report("数据库（含 FTS5）", False, str(e))
+
+    try:
+        tokens = seg("花生过敏体检测试")
+        report("中文分词（jieba）", bool(tokens), f"{tokens}")
+    except Exception as e:
+        report("中文分词（jieba）", False, str(e))
+
+    if not mock:
+        if not cfg.llm.api_key:
+            report("聊天模型 API", False,
+                   "未配置 api_key（.env 的 DEEPSEEK_API_KEY 或 config.yaml llm.api_key）")
+        else:
+            try:
+                t0 = _time.time()
+                client = LLMChatClient(cfg)
+                reply = await client.achat(
+                    [{"role": "user", "content": "只回复两个字：正常"}])
+                report("聊天模型 API", bool(reply.strip()),
+                       f"{cfg.llm.model} · {_time.time() - t0:.1f}s · 回复「{reply.strip()[:20]}」")
+            except Exception as e:
+                report("聊天模型 API", False, f"{type(e).__name__}: {e}")
+
+        try:
+            if cfg.embedding.provider == "api" and not cfg.embedding.api.api_key:
+                report("嵌入 API", False,
+                       "未配置 api_key（.env 的 SILICONFLOW_API_KEY 或 config.yaml）")
+            else:
+                embedder = create_embedder(cfg)
+                vec = (await embedder.embed(["体检"]))[0]
+                report(f"嵌入（{cfg.embedding.provider}）", True,
+                       f"{embedder.name} · dim={len(vec)}")
+        except Exception as e:
+            report("嵌入", False, f"{type(e).__name__}: {e}")
+
+    print(f"结果：{'全部通过，可以启动 ✅' if failures == 0 else f'{failures} 项未通过 ❌'}")
+    return failures
 
 
 async def _build_pipeline(cfg, mock: bool):

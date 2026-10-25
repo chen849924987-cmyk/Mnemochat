@@ -39,6 +39,8 @@ class PersonaCard(BaseModel):
     parameters: dict[str, float] = Field(default_factory=dict)
     greeting: str = ""       # 入群/初次见面问候
     source_notes: str = ""   # 来源备注（如导入自 SillyTavern 卡）
+    # AI 味黑名单：这些表达出现在机器人发言中即判漂移（进入漂移评审标准）
+    ai_flavor_blocklist: list[str] = Field(default_factory=list)
 
     @classmethod
     def load_yaml(cls, path: str | Path) -> "PersonaCard":
