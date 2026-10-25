@@ -29,6 +29,8 @@ if TYPE_CHECKING:
     from embed.base import EmbeddingProvider
     from memory.store import MemoryStore
     from persona.card import PersonaCard
+    from stickers.library import StickerLibrary
+    from stickers.tagger import StickerTagger, VisionDescriber
     from util.clock import Clock
 
 log = logging.getLogger(__name__)
@@ -38,7 +40,9 @@ class BotPipeline:
     def __init__(self, store: "MemoryStore", chat: "ChatBackend",
                  embedder: "EmbeddingProvider", persona: "PersonaCard",
                  cfg: "BotConfig", clock: "Clock",
-                 persona_file: str | Path | None = None) -> None:
+                 persona_file: str | Path | None = None,
+                 sticker_lib: "StickerLibrary | None" = None,
+                 vision: "VisionDescriber | None" = None) -> None:
         self.store = store
         self.chat = chat
         self.embedder = embedder
@@ -68,6 +72,13 @@ class BotPipeline:
         self.drift_hint: str | None = None   # 漂移期间注入的角色校准提醒
         self._drift = (DriftDetector(store, chat, persona, cfg, clock)
                        if cfg.drift.enabled else None)
+        # 表情包子系统（可选）
+        self.sticker_lib = sticker_lib
+        self._sticker_tagger = None
+        if sticker_lib is not None:
+            from stickers.tagger import StickerTagger
+
+            self._sticker_tagger = StickerTagger(sticker_lib, chat, vision, cfg, clock)
 
     # ---------- 对外入口 ----------
 
@@ -119,7 +130,11 @@ class BotPipeline:
         )
         recall = await self.recaller.recall(group_id, self.persona, window)
         system = build_reply_system(self.persona, recall, group_id, now,
-                                     extra_hint=self.drift_hint or "")
+                                    extra_hint=self.drift_hint or "")
+        if self.sticker_lib is not None:
+            block = await self.sticker_lib.prompt_block(group_id)
+            if block:
+                system = f"{system}\n\n{block}"
         user = self._render_window(window, trigger)
         reply = await self.chat.achat([
             {"role": "system", "content": system},
@@ -190,6 +205,11 @@ class BotPipeline:
                     self.drift_hint = None   # 恢复在线，撤销校准提醒
             except Exception:
                 log.exception("人格漂移检测失败（不影响巩固结果）")
+        if self._sticker_tagger is not None:
+            try:
+                await self._sticker_tagger.run()
+            except Exception:
+                log.exception("表情包打标失败（不影响巩固结果）")
         return self.last_consolidation_result
 
     def reset_window(self, group_id: str) -> None:

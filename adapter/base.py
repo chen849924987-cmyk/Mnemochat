@@ -38,6 +38,8 @@ class GroupChatAdapter:
         self.pipeline = pipeline
         self.cfg = cfg
         self.clock = clock
+        # 表情包图库（pipeline 配置了才有；适配器负责收图与发图）
+        self.sticker_lib = getattr(pipeline, "sticker_lib", None)
 
     async def run(self) -> None:  # pragma: no cover - 由子类实现
         raise NotImplementedError

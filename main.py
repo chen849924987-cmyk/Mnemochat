@@ -181,9 +181,14 @@ async def _cmd_check(cfg, mock: bool) -> int:
         await store.init()
         stats = await store.stats()
         total_mem = sum(stats["stage"].values())
-        report("数据库（含 FTS5）", True,
-               f"{cfg.database} · 记忆 {total_mem} 条 · 消息 {stats['messages']} 条 · "
-               f"嵌入模型 {list(stats['embeddings']) or '无'}")
+        detail = (f"{cfg.database} · 记忆 {total_mem} 条 · 消息 {stats['messages']} 条 · "
+                  f"嵌入模型 {list(stats['embeddings']) or '无'}")
+        if cfg.sticker.enabled:
+            from stickers.library import StickerLibrary
+
+            s = await StickerLibrary(store, cfg).stats()
+            detail += f" · 表情包 {s['total']} 张（已打标 {s['tagged']}）"
+        report("数据库（含 FTS5）", True, detail)
         await store.close()
     except Exception as e:
         report("数据库（含 FTS5）", False, str(e))
@@ -233,6 +238,8 @@ async def _build_pipeline(cfg, mock: bool):
     from embed.mock import HashEmbedder
     from memory.store import MemoryStore
     from persona.card import PersonaCard
+    from stickers.library import StickerLibrary
+    from stickers.tagger import create_vision
     from util.clock import Clock
 
     clock = Clock()
@@ -241,8 +248,11 @@ async def _build_pipeline(cfg, mock: bool):
     chat = MockChatClient() if mock else LLMChatClient(cfg)
     embedder = HashEmbedder() if mock else create_embedder(cfg)
     persona = PersonaCard.load_yaml(cfg.persona_file)
+    sticker_lib = StickerLibrary(store, cfg) if cfg.sticker.enabled else None
+    vision = create_vision(cfg, mock) if sticker_lib else None
     pipeline = BotPipeline(store, chat, embedder, persona, cfg, clock,
-                           persona_file=cfg.persona_file)
+                           persona_file=cfg.persona_file,
+                           sticker_lib=sticker_lib, vision=vision)
     return pipeline, store
 
 

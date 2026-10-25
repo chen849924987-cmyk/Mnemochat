@@ -113,5 +113,19 @@ drift:
   sample_size: 12
   adherence_threshold: 6.0
 
+# ---------- 表情包（旁观收集 → 学习分类 → 聊天时按分类发图） ----------
+sticker:
+  enabled: true
+  collect_max_kb: 800          # 超过该大小的图视为照片，不入表情库
+  send_cooldown_seconds: 300   # 发图冷却，防刷屏
+  tag_batch: 8
+  vision:
+    # 视觉理解可选：model 留空 = 纯语境学习（靠出现上下文打标签，零额外成本）
+    # 填 OpenAI 兼容视觉端点即启用画面理解（硅基流动 Qwen-VL 系用嵌入同一个 key；
+    # 若你的聊天端点提供视觉模型，改 base_url + model 指向它即可，--check 可实测）
+    base_url: https://api.siliconflow.cn/v1
+    api_key: ${SILICONFLOW_API_KEY}
+    model: ""                  # 例：Qwen/Qwen2.5-VL-32B-Instruct
+
 # 模拟器使用的群 ID
 sim_group_id: "sim-main"

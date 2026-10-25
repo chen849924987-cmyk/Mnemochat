@@ -108,12 +108,18 @@ class TelegramAdapter(GroupChatAdapter):
                 loop_task.cancel()
 
     async def _handle(self, client: httpx.AsyncClient, gm: GroupMessage) -> None:
+        from stickers.library import extract_sticker_markers
+
         try:
             reply = await self.pipeline.on_user_message(
                 gm.group_id, gm.user_id, gm.user_name, gm.text,
                 force_reply=gm.mentioned_bot,
             )
             if reply:
+                # Telegram 暂不支持发图表情，剥离标记只发文字
+                _, reply = extract_sticker_markers(reply)
+                if not reply:
+                    return
                 params: dict = {"chat_id": int(gm.group_id), "text": reply}
                 if self.cfg.telegram.reply_to_message and gm.message_id:
                     params["reply_to_message_id"] = int(gm.message_id)

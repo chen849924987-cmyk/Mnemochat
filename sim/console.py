@@ -34,6 +34,8 @@ from embed.mock import HashEmbedder
 from memory.store import MemoryStore
 from persona.card import PersonaCard
 from sim.tables import memories_table, recall_table, stats_table
+from stickers.library import StickerLibrary
+from stickers.tagger import create_vision
 from util.clock import Clock
 from util.text import fmt_ts, warmup
 
@@ -64,7 +66,11 @@ async def run_sim(cfg: BotConfig, mock: bool = False, config_path: str = "config
     embedder = HashEmbedder() if mock else create_embedder(cfg)
     persona = PersonaCard.load_yaml(cfg.persona_file)
     pipe = BotPipeline(store, chat, embedder, persona, cfg, clock,
-                       persona_file=cfg.persona_file)
+                       persona_file=cfg.persona_file,
+                       sticker_lib=(StickerLibrary(store, cfg)
+                                    if cfg.sticker.enabled else None),
+                       vision=(create_vision(cfg, mock)
+                               if cfg.sticker.enabled else None))
 
     console = Console()
     mode = "[yellow]MOCK 离线[/]" if mock else "[green]API[/]"
@@ -147,6 +153,22 @@ async def run_sim(cfg: BotConfig, mock: bool = False, config_path: str = "config
                     status=None, limit=100,
                 )
                 console.print(memories_table(rows, clock.now(), title=f"记忆库·{stage}"))
+                continue
+            if line == "/stickers":
+                if pipe.sticker_lib is None:
+                    console.print("[dim]sticker.enabled 未开启[/]")
+                else:
+                    from rich.table import Table as _T
+
+                    rows = await pipe.sticker_lib.list_stickers(30)
+                    t = _T(title=f"表情包库（{len(rows)} 张）")
+                    for col in ("id", "标签", "次数", "来源群", "描述"):
+                        t.add_column(col, overflow="fold")
+                    for r in rows:
+                        t.add_row(str(r["id"]), "、".join(r["tags"]) or "未打标",
+                                  str(r["use_count"]), r["group_id"],
+                                  (r["description"] or "")[:24])
+                    console.print(t)
                 continue
             if line == "/window reset":
                 pipe.reset_window(cfg.sim_group_id)

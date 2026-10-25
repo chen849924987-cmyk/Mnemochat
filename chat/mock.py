@@ -65,6 +65,12 @@ class MockChatClient:
                 return {"adherence": 3, "drifted": True,
                         "issues": ["客服/AI助手腔"], "suggestion": "回到群友口吻"}
             return {"adherence": 9, "drifted": False, "issues": [], "suggestion": ""}
+        if "表情包标签" in system:
+            if re.search(r"哈哈|笑死|好笑", user):
+                return {"tags": ["搞笑"]}
+            if "猫" in user:
+                return {"tags": ["猫猫"]}
+            return {"tags": ["通用"]}
         return {}
 
     @staticmethod

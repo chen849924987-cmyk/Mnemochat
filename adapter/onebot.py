@@ -17,6 +17,7 @@ import json
 import logging
 import random
 import re
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from adapter.base import GroupChatAdapter, GroupMessage
@@ -129,6 +130,19 @@ def build_reply_segments(reply_text: str, at_qq: str | None, at_sender: bool) ->
     return segments
 
 
+def image_urls_from_event(event: dict) -> list[str]:
+    """提取群消息里的图片段下载地址（表情包收集的入口）。"""
+    msg = event.get("message")
+    urls: list[str] = []
+    if isinstance(msg, list):
+        for seg in msg:
+            if seg.get("type") == "image":
+                url = (seg.get("data") or {}).get("url")
+                if url:
+                    urls.append(str(url))
+    return urls
+
+
 def split_reply(reply: str, max_parts: int = 5) -> list[str]:
     """按行拆成多条消息（角色卡常见的'一条一行'铁律）；
     超过 max_parts 时多余行合并进最后一条，防刷屏。"""
@@ -182,13 +196,22 @@ class OneBotV11Adapter(GroupChatAdapter):
                     self.self_qq = self_id
                     continue
                 gm = parse_group_message(data, self.self_qq)
-                if gm is None or not gm.text:
-                    continue
-                asyncio.create_task(self._handle(ws, gm))
+                if gm is not None:
+                    if self.sticker_lib is not None:
+                        # 旁观收图：表情包下载去重入库（不阻塞消息处理）
+                        now = self.clock.now()
+                        for url in image_urls_from_event(data):
+                            asyncio.create_task(self.sticker_lib.collect(
+                                url, gm.group_id, gm.user_name, now))
+                    if not gm.text:
+                        continue
+                    asyncio.create_task(self._handle(ws, gm))
         finally:
             loop_task.cancel()
 
     async def _handle(self, ws, gm: GroupMessage) -> None:
+        from stickers.library import extract_sticker_markers
+
         async with self._sem:
             try:
                 reply = await self.pipeline.on_user_message(
@@ -196,6 +219,25 @@ class OneBotV11Adapter(GroupChatAdapter):
                     force_reply=gm.mentioned_bot,
                 )
                 if reply:
+                    # 表情包标记：先发图（先图后字，与角色卡 send_sticker 规范一致）
+                    markers, clean = extract_sticker_markers(reply)
+                    for tag in markers[:1]:
+                        sticker = None
+                        if self.sticker_lib is not None:
+                            sticker = await self.sticker_lib.pick_by_tag(tag, gm.group_id)
+                        if sticker:
+                            path = Path(sticker["file_path"]).as_posix()
+                            await ws.send(json.dumps({
+                                "action": "send_group_msg",
+                                "params": {
+                                    "group_id": int(gm.group_id),
+                                    "message": [{"type": "image",
+                                                 "data": {"file": f"file:///{path}"}}],
+                                },
+                            }, ensure_ascii=False))
+                            await asyncio.sleep(random.uniform(0.5, 1.2))
+                    reply = clean
+
                     # 按行拆成多条消息：第一条 @ 发送者，其余纯文本；
                     # 条间随机小延迟，模拟真人打字节奏（也降低风控风险）
                     for i, part in enumerate(split_reply(reply)):

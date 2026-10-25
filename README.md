@@ -115,6 +115,15 @@ python main.py --edit-persona personas/deepseek_whale.yaml
 
 内置示例卡：`personas/default.yaml`（小满）、`personas/dafeiyu.yaml`（大肥鱼·DeepSeek 娘）、`personas/deepseek_whale.yaml`（DeepSeek 小鲸鱼·QQ 群友版，去AI味铁律+梗生态+示例对话，OneBot 适配器已支持"一条一行"自动拆条发送）。
 
+## 表情包（存 · 学 · 发）
+
+机器人会**旁观收集**群友发的表情包（按内容 md5 去重，超过 `collect_max_kb` 的图视为照片不入库），每次出现都记录语境；巩固时批量**学习分类**——两种模式：
+
+- **语境学习**（默认，零额外成本）：根据表情包每次出现时的前后消息打标签（发三次"哈哈"时出现的图自动获得"搞笑"标签）
+- **视觉理解**（可选）：配置 OpenAI 兼容视觉端点（`sticker.vision.model`）后先用 VL 模型描述画面再打标，更准。DeepSeek 官方 chat API 是纯文本的——若你的端点提供视觉模型就填它，否则推荐硅基流动 Qwen-VL（和嵌入同一个 key）
+
+**发送**：模型看到系统提示里的可用分类清单，想发表情就在回复中嵌入 `[[sticker:分类]]` 标记；适配器先发图、间隔半秒再发文字（与角色卡的 send_sticker 规范一致），带发图冷却防刷屏。模拟器用 `/stickers` 查看图库。
+
 ## 人格漂移检测
 
 每次巩固后，抽样机器人近期发言与角色卡比对（评审模型打贴合度分）。判定漂移（客服腔、AI 助手腔、风格突变）时：
@@ -178,16 +187,17 @@ chat/              llm 客户端、mock 后端、群聊行为策略、回复主�
 memory/            schema/store/ingest/consolidate/recall/decay
 embed/             api / local / mock 三通道嵌入
 persona/           角色卡、人格守卫（知识边界/注入格式）、漂移检测、酒馆卡转换
+stickers/          表情包图库（旁观收集/语境+视觉打标/按分类发图）
 editor/            人格卡修改器（本地网页：滑条调参/卡导入/预览/热重载）
 sim/               控制台模拟器、记忆管理台、表格渲染
 personas/          角色卡（default 小满 / dafeiyu 大肥鱼 / deepseek_whale 小鲸鱼）
-tests/             69 个离线测试（衰减/入库/检索/巩固/人格/漂移/多群/适配器/卡转换/导出/端到端验收）
+tests/             77 个离线测试（衰减/入库/检索/巩固/人格/漂移/多群/适配器/卡转换/表情包/导出/端到端验收）
 ```
 
 ## 测试
 
 ```bash
-python -m pytest tests/ -q      # 69 passed，全程离线
+python -m pytest tests/ -q      # 77 passed，全程离线
 ```
 
 验收用例 `tests/test_e2e_acceptance.py::test_remember_allergy_after_two_weeks`：说过过敏 → 快进 14 天 → 清空对话窗口 → 相关话题时以"约两周前"的口吻召回，且召回强化生效。
@@ -199,9 +209,10 @@ python -m pytest tests/ -q      # 69 passed，全程离线
 - [x] 人格漂移检测（巩固时抽样评审 + 角色校准提醒闭环）
 - [x] 记忆导出/导入（备份迁移，`--export` / `--import`）
 - [x] 人格卡修改器（网页滑条调参 + SillyTavern 卡导入 + 热重载）
+- [x] 表情包：旁观收集 → 语境/视觉打标 → `[[sticker:分类]]` 发图
 - [ ] `visibility: self` 的机器人自我反思记忆
 - [ ] Discord 适配器、多角色多群管理台、记忆可视化面板
-- [ ] 表情包/说说/联网搜索等工具调用（角色卡中此类设定已预留位置）
+- [ ] Telegram 发图表情、说说/联网搜索等工具调用
 
 > ⚠️ 合规提示：非官方 QQ 协议实现（NapCat 等）存在违反腾讯服务条款导致账号风控的风险，请自行评估并使用小号。本仓库不包含任何协议实现，仅作为 OneBot 11 标准客户端。
 

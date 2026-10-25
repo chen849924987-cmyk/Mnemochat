@@ -155,6 +155,28 @@ class DriftConfig(BaseModel):
     adherence_threshold: float = 6.0  # 低于该贴合度判为漂移
 
 
+class StickerVisionConfig(BaseModel):
+    """视觉理解（可选）：给表情包打画面描述。留空 model = 纯语境学习。"""
+
+    model_config = ConfigDict(extra="ignore")
+
+    base_url: str = "https://api.siliconflow.cn/v1"
+    api_key: str = ""
+    model: str = ""    # 例：Qwen/Qwen2.5-VL-32B-Instruct；空 = 不用视觉
+
+
+class StickerConfig(BaseModel):
+    """表情包：旁观收集群友的表情包，学习分类，聊天时按分类发图。"""
+
+    model_config = ConfigDict(extra="ignore")
+
+    enabled: bool = True
+    collect_max_kb: int = 800         # 超过该大小的图视为照片，不入表情库
+    send_cooldown_seconds: float = 300  # 发图冷却，防刷屏
+    tag_batch: int = 8                # 每轮巩固打标的表情包数量
+    vision: StickerVisionConfig = StickerVisionConfig()
+
+
 class BotConfig(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
@@ -172,6 +194,7 @@ class BotConfig(BaseModel):
     onebot: OnebotConfig = OnebotConfig()
     telegram: TelegramConfig = TelegramConfig()
     drift: DriftConfig = DriftConfig()
+    sticker: StickerConfig = StickerConfig()
     sim_group_id: str = "sim-main"
 
 
