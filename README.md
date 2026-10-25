@@ -83,6 +83,8 @@ python main.py --sim
 python main.py --onebot
 ```
 
+> Windows 用户可以直接双击 `start.bat` 菜单式启动。**从零到真实 QQ 群的完整步骤（含 NapCat 部署、测试剧本、常见问题）见 [docs/qq-test-guide.md](docs/qq-test-guide.md)。**
+
 @机器人 必回；叫名字/小概率插话由 `behavior` 配置决定。所有群消息（包括机器人没回复的）都会进入记忆管线——先听，才记得。
 
 接入 Telegram 群：
