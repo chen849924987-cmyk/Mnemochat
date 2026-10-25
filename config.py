@@ -125,6 +125,17 @@ class WindowConfig(BaseModel):
     recent_turns: int = 20
 
 
+class OnebotConfig(BaseModel):
+    """QQ OneBot v11（NapCat / LLOneBot / Lagrange）正向 WebSocket。"""
+
+    model_config = ConfigDict(extra="ignore")
+
+    ws_url: str = "ws://127.0.0.1:3001"
+    access_token: str = ""
+    at_sender_on_reply: bool = True
+    max_concurrent_replies: int = 4
+
+
 class BotConfig(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
@@ -139,6 +150,7 @@ class BotConfig(BaseModel):
     decay: DecayConfig = DecayConfig()
     behavior: BehaviorConfig = BehaviorConfig()
     window: WindowConfig = WindowConfig()
+    onebot: OnebotConfig = OnebotConfig()
     sim_group_id: str = "sim-main"
 
 

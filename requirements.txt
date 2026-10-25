@@ -6,5 +6,6 @@ PyYAML>=6.0
 rich>=13.7
 jieba>=0.42
 python-dotenv>=1.0
+websockets>=13
 pytest>=8.0
 pytest-asyncio>=0.23

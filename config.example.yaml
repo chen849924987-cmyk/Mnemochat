@@ -88,5 +88,14 @@ behavior:
 window:
   recent_turns: 20            # 组 prompt 时携带的最近消息条数
 
+# ---------- QQ 接入（OneBot v11，可选） ----------
+# 需先部署 NapCat / LLOneBot / Lagrange 并开启"正向 WebSocket 服务器"；
+# 之后 python main.py --onebot 启动真实 QQ 群聊模式
+onebot:
+  ws_url: ws://127.0.0.1:3001
+  access_token: ""            # 与 OneBot 实现侧设置的 token 一致，未设置则留空
+  at_sender_on_reply: true    # 回复时是否 @ 发送者
+  max_concurrent_replies: 4   # 并发回复上限（防 LLM 突发风暴）
+
 # 模拟器使用的群 ID
 sim_group_id: "sim-main"

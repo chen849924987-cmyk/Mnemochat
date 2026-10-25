@@ -41,7 +41,7 @@ async def run_inspect(cfg: BotConfig, mock: bool = False) -> None:
     chat = MockChatClient() if mock else LLMChatClient(cfg)
     embedder = HashEmbedder() if mock else create_embedder(cfg)
     persona = PersonaCard.load_yaml(cfg.persona_file)
-    pipe = BotPipeline(store, chat, embedder, persona, cfg, clock, cfg.sim_group_id)
+    pipe = BotPipeline(store, chat, embedder, persona, cfg, clock)
 
     console = Console()
     console.print(f"\n[bold]记忆管理台[/] · 库 {cfg.database} · 嵌入 {embedder.name}")

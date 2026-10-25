@@ -2,7 +2,7 @@
 
 > 让 API 驱动的群聊机器人像人一样记住群友——会遗忘、会想起、越想起越牢固，但**永不删库**。
 
-一个自研的轻量记忆核心：分层漏斗（STM → Staging → LTM）+ 艾宾浩斯衰减 + 检索强化 + 混合检索（BM25/向量/实体图）+ 人格锚定。单文件 SQLite 存储，零外部服务依赖。
+一个自研的轻量记忆核心：分层漏斗（STM → Staging → LTM）+ 艾宾浩斯衰减 + 检索强化 + 混合检索（BM25/向量/实体图）+ 人格锚定。单文件 SQLite 存储，零外部服务依赖。已支持接入 **QQ 群**（OneBot v11 / NapCat / LLOneBot / Lagrange），也内置控制台模拟器用于离线开发验证。
 
 ## 为什么不是"定期摘要删库"
 
@@ -67,6 +67,17 @@ python main.py --init            # 生成 config.yaml 与 .env
 python main.py --sim
 ```
 
+接入真实 QQ 群（OneBot v11）：
+
+```bash
+# 1. 部署任一 OneBot 11 实现（以 NapCat 为例）并登录你的机器人 QQ 号
+# 2. 在其网络设置里开启「正向 WebSocket 服务器」，端口默认 3001
+# 3. config.yaml 的 onebot.ws_url 指向它，然后：
+python main.py --onebot
+```
+
+@机器人 必回；叫名字/小概率插话由 `behavior` 配置决定。所有群消息（包括机器人没回复的）都会进入记忆管线——先听，才记得。
+
 两分钟看懂它怎么"活"：
 
 ```
@@ -115,31 +126,35 @@ python main.py --sim
 ## 项目结构
 
 ```
-main.py            入口：--sim / --inspect / --reembed / --init
+main.py            入口：--sim / --onebot / --inspect / --reembed / --init
 config.py          配置加载（yaml + ${ENV} 密钥插值）
-chat/              llm 客户端、mock 后端、群聊行为策略、回复主管线
+adapter/           平台适配层：QQ OneBot v11（正向 WS，断线重连）
+chat/              llm 客户端、mock 后端、群聊行为策略、回复主管线（多群安全）
 memory/            schema/store/ingest/consolidate/recall/decay
 embed/             api / local / mock 三通道嵌入
 persona/           角色卡、人格守卫（知识边界过滤、回忆注入格式）
 sim/               控制台模拟器、记忆管理台、表格渲染
 personas/          角色卡（default.yaml）
-tests/             38 个离线测试（衰减/入库/检索/巩固/人格/端到端验收）
+tests/             47 个离线测试（衰减/入库/检索/巩固/人格/多群/OneBot/端到端验收）
 ```
 
 ## 测试
 
 ```bash
-python -m pytest tests/ -q      # 38 passed，全程离线
+python -m pytest tests/ -q      # 47 passed，全程离线
 ```
 
 验收用例 `tests/test_e2e_acceptance.py::test_remember_allergy_after_two_weeks`：说过过敏 → 快进 14 天 → 清空对话窗口 → 相关话题时以"约两周前"的口吻召回，且召回强化生效。
 
 ## 路线图
 
-- [ ] 平台适配器（QQ/OneBot、Telegram、Discord）——pipeline 已按 adapter 协议预留接口
+- [x] QQ 适配器（OneBot v11 正向 WebSocket：NapCat / LLOneBot / Lagrange）
+- [ ] Telegram / Discord 适配器（adapter 层已就位，按协议实现即可）
 - [ ] 人格漂移检测（巩固时抽样比对近期语气与角色卡）
 - [ ] `visibility: self` 的机器人自我反思记忆
 - [ ] 记忆导出/导入、多角色多群管理台
+
+> ⚠️ 合规提示：非官方 QQ 协议实现（NapCat 等）存在违反腾讯服务条款导致账号风控的风险，请自行评估并使用小号。本仓库不包含任何协议实现，仅作为 OneBot 11 标准客户端。
 
 ## 致谢
 
@@ -147,4 +162,4 @@ python -m pytest tests/ -q      # 38 passed，全程离线
 
 ## 许可证
 
-待定（建议 MIT 或 Apache-2.0）。
+[MIT](LICENSE)

@@ -63,7 +63,7 @@ async def run_sim(cfg: BotConfig, mock: bool = False, config_path: str = "config
     chat = MockChatClient() if mock else LLMChatClient(cfg)
     embedder = HashEmbedder() if mock else create_embedder(cfg)
     persona = PersonaCard.load_yaml(cfg.persona_file)
-    pipe = BotPipeline(store, chat, embedder, persona, cfg, clock, cfg.sim_group_id)
+    pipe = BotPipeline(store, chat, embedder, persona, cfg, clock)
 
     console = Console()
     mode = "[yellow]MOCK 离线[/]" if mock else "[green]API[/]"
@@ -145,7 +145,7 @@ async def run_sim(cfg: BotConfig, mock: bool = False, config_path: str = "config
                 console.print(memories_table(rows, clock.now(), title=f"记忆库·{stage}"))
                 continue
             if line == "/window reset":
-                pipe.reset_window()
+                pipe.reset_window(cfg.sim_group_id)
                 console.print("🧹 对话窗口已清空——接下来只能靠长期记忆了。")
                 continue
             if line.startswith("/recall "):
@@ -163,7 +163,7 @@ async def run_sim(cfg: BotConfig, mock: bool = False, config_path: str = "config
                 console.print("[dim]格式：名字: 消息　|　命令：/help[/]")
                 continue
             name, content = m.group(1), m.group(2)
-            reply = await pipe.on_user_message(name, name, content)
+            reply = await pipe.on_user_message(cfg.sim_group_id, name, name, content)
             if reply:
                 console.print(f"[bold green]{persona.name}[/]: {reply}")
             else:

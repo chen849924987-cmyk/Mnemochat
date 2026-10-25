@@ -13,11 +13,11 @@ from memory.models import MemoryRecord
 async def test_remember_allergy_after_two_weeks(
     store, chat, embedder, cfg, clock, persona
 ):
-    pipe = BotPipeline(store, chat, embedder, persona, cfg, clock, group_id="g1")
+    pipe = BotPipeline(store, chat, embedder, persona, cfg, clock)
 
     # ---- 第一天：小明随口提到过敏 ----
     reply1 = await pipe.on_user_message(
-        "小明", "小明", "我对花生过敏，大家点菜注意点", force_reply=True
+        "g1", "小明", "小明", "我对花生过敏，大家点菜注意点", force_reply=True
     )
     assert reply1  # mock 也会回复
     await pipe.flush_ingest()
@@ -34,11 +34,11 @@ async def test_remember_allergy_after_two_weeks(
     assert result.promoted == 1
 
     # ---- 清空对话窗口：机器人"失忆"了眼前的事 ----
-    pipe.reset_window()
+    pipe.reset_window("g1")
 
     # ---- 小明再聊吃的：只能靠长期记忆 ----
     reply2 = await pipe.on_user_message(
-        "小明", "小明", "小满，今晚聚餐吃什么好", force_reply=True
+        "g1", "小明", "小明", "小满，今晚聚餐吃什么好", force_reply=True
     )
 
     # 回忆块注入了 system prompt，且带相对时间
@@ -60,10 +60,10 @@ async def test_remember_allergy_after_two_weeks(
 
 async def test_bot_quiet_when_not_triggered(store, chat, embedder, cfg, clock, persona):
     """不点名时机器人旁观（不回复），但消息照常入库等待提取。"""
-    pipe = BotPipeline(store, chat, embedder, persona, cfg, clock, group_id="g1")
+    pipe = BotPipeline(store, chat, embedder, persona, cfg, clock)
     cfg.behavior.reply_probability = 0.0
 
-    reply = await pipe.on_user_message("小红", "小红", "今天天气不错呀")
+    reply = await pipe.on_user_message("g1", "小红", "小红", "今天天气不错呀")
     assert reply is None
     await pipe.flush_ingest()
     # 消息进入了日志（旁观学习）
