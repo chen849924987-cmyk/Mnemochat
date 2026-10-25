@@ -37,6 +37,8 @@ class PersonaCard(BaseModel):
     system_extra: str = ""
     # 数值化人格参数（0-10）：修改器滑条可调，注入 prompt 供模型把握分寸
     parameters: dict[str, float] = Field(default_factory=dict)
+    # 兴趣词：命中时兴趣度加分（"机器人对什么话题感兴趣"，修改器可调）
+    interests: list[str] = Field(default_factory=list)
     greeting: str = ""       # 入群/初次见面问候
     source_notes: str = ""   # 来源备注（如导入自 SillyTavern 卡）
     # AI 味黑名单：这些表达出现在机器人发言中即判漂移（进入漂移评审标准）

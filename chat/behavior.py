@@ -16,14 +16,25 @@ class Behavior:
         self.cfg = cfg
         self.names = [n for n in {name for name in bot_names + list(cfg.names) if name}]
 
-    def should_reply(self, content: str, rng: random.Random | None = None) -> bool:
+    def is_addressed(self, content: str) -> bool:
+        """被 @ 或被叫名字：硬触发，必回。"""
+        if not self.cfg.reply_on_mention:
+            return False
+        for name in self.names:
+            if name in content or f"@{name}" in content:
+                return True
+        return False
+
+    def chance_reply(self, content: str, rng: random.Random | None = None) -> bool:
+        """纯概率兜底（interest_enabled=false 时的插话策略）。"""
         rng = rng or random
-        if self.cfg.reply_on_mention:
-            for name in self.names:
-                if name in content or f"@{name}" in content:
-                    return True
+        return self.cfg.reply_probability > 0 and rng.random() < self.cfg.reply_probability
+
+    def should_reply(self, content: str, rng: random.Random | None = None) -> bool:
+        """旧接口：地址触发 + 可选问句 + 概率（兼容无兴趣评分的场景）。"""
+        rng = rng or random
+        if self.is_addressed(content):
+            return True
         if self.cfg.reply_on_question and content.rstrip().endswith(("?", "？")):
             return True
-        if self.cfg.reply_probability > 0 and rng.random() < self.cfg.reply_probability:
-            return True
-        return False
+        return self.chance_reply(content, rng)

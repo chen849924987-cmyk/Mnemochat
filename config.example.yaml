@@ -79,10 +79,20 @@ decay:
 
 # ---------- 群聊行为 ----------
 behavior:
-  reply_on_mention: true      # @机器人 或 提到名字 时回复
+  reply_on_mention: true      # @机器人 或 提到名字 时必回
   names: []                   # 额外唤醒词（默认取角色卡名字），如 ["小满", "满满"]
-  reply_probability: 0.15     # 随机插话概率
-  reply_on_question: false    # 群里出现问句时是否回复
+  reply_on_question: false    # 问句是否必回（默认交给兴趣评分软判断）
+  reply_probability: 0.15     # 概率插话（仅 interest_enabled: false 时生效）
+  # 兴趣度评分：@/叫名字必回之外，按分数决定接不接话（纯本地计算，毫秒级）
+  # 分数 = 话题基础 + 问句 + 角色兴趣词命中 + 记忆相关 + 情绪抖动 - 冷却惩罚
+  interest_enabled: true
+  interest_threshold: 45      # 达到才回（调低=更活跃，调高=更高冷）
+  interest_cooldown_seconds: 180   # 刚回复过则兴致下降（防刷屏）
+  interest_cooldown_penalty: 40
+  interest_question_bonus: 20
+  interest_memory_bonus: 25   # 消息提到机器人记得的人/事时加分
+  interest_jitter: 15         # 情绪抖动上限：同样的消息时接时不接，避免机械感
+  interest_min_length: 6      # 过短消息（哈哈/6）不构成话题
 
 # ---------- 对话窗口 ----------
 window:

@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from chat.behavior import Behavior
+from chat.interest import InterestScorer, InterestVerdict
 from memory.ingest import IngestResult, Ingestor, format_window
 from memory.consolidate import ConsolidationResult, Consolidator
 from memory.models import MessageRecord
@@ -60,6 +61,8 @@ class BotPipeline:
         self.recaller = Recaller(store, embedder, cfg, clock)
         self.consolidator = Consolidator(store, chat, embedder, cfg, clock)
         self.behavior = Behavior(cfg.behavior, [persona.name])
+        self._interest = InterestScorer(store, cfg, clock)
+        self.last_interest: InterestVerdict | None = None
 
         # 多群安全：每群独立的待入库缓冲与窗口重置点
         self._pending: dict[str, list[MessageRecord]] = {}
@@ -91,9 +94,21 @@ class BotPipeline:
                             user_name=user_name, content=content, ts=now)
         self._pending.setdefault(group_id, []).append(msg)
 
+        # 回复决策：@/叫名字必回 → 问句（配置）→ 兴趣评分 → 概率兜底
         reply: str | None = None
-        if force_reply or self.behavior.should_reply(content):
+        if force_reply or self.behavior.is_addressed(content):
             reply = await self._reply(group_id, msg)
+        elif self.cfg.behavior.reply_on_question and content.rstrip().endswith(("?", "？")):
+            reply = await self._reply(group_id, msg)
+        elif self.cfg.behavior.interest_enabled:
+            verdict = await self._interest.score(group_id, content, self.persona)
+            self.last_interest = verdict
+            if verdict.will_reply:
+                reply = await self._reply(group_id, msg)
+        elif self.behavior.chance_reply(content):
+            reply = await self._reply(group_id, msg)
+        if reply is not None:
+            self._interest.note_replied(group_id)
 
         self._schedule_ingest(group_id)
         return reply

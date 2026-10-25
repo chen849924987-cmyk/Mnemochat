@@ -80,6 +80,8 @@
     <textarea id="speech_style" rows="2"></textarea>
     <label>口头禅（逗号分隔）</label>
     <input type="text" id="catchphrases">
+    <label>兴趣词（逗号分隔；群聊中出现这些话题时机器人更容易接话）</label>
+    <input type="text" id="interests">
   </section>
 
   <section>
@@ -144,6 +146,8 @@ function render() {
   document.getElementById("speech_style").value = persona.speech_style || "";
   document.getElementById("catchphrases").value =
     (persona.catchphrases || []).join("，");
+  document.getElementById("interests").value =
+    (persona.interests || []).join("，");
   document.getElementById("memory_stance").value = persona.memory_stance || "";
   document.getElementById("system_extra").value = persona.system_extra || "";
   const b = persona.boundary || {};
@@ -197,6 +201,8 @@ function collect() {
   persona.identity = document.getElementById("identity").value;
   persona.speech_style = document.getElementById("speech_style").value;
   persona.catchphrases = document.getElementById("catchphrases").value
+    .split(/[,，、]/).map(s => s.trim()).filter(Boolean);
+  persona.interests = document.getElementById("interests").value
     .split(/[,，、]/).map(s => s.trim()).filter(Boolean);
   persona.memory_stance = document.getElementById("memory_stance").value;
   persona.system_extra = document.getElementById("system_extra").value;

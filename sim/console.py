@@ -191,9 +191,16 @@ async def run_sim(cfg: BotConfig, mock: bool = False, config_path: str = "config
             name, content = m.group(1), m.group(2)
             reply = await pipe.on_user_message(cfg.sim_group_id, name, name, content)
             if reply:
-                console.print(f"[bold green]{persona.name}[/]: {reply}")
+                console.print(f"[bold green]{pipe.persona.name}[/]: {reply}")
             else:
-                console.print("[dim]（小满在旁边看着，没有说话……）[/]")
+                v = pipe.last_interest
+                if v is not None:
+                    parts = " ".join(f"{k}{'+' if val >= 0 else ''}{val:.0f}"
+                                     for k, val in v.factors.items())
+                    console.print(f"[dim]（兴致 {v.score:.0f}＜{cfg.behavior.interest_threshold}"
+                                  f"｜{parts} → 潜水中）[/]")
+                else:
+                    console.print(f"[dim]（{pipe.persona.name}在旁边看着，没有说话……）[/]")
             if pipe._tasks:
                 await asyncio.gather(*pipe._tasks, return_exceptions=True)
             report_ingest()

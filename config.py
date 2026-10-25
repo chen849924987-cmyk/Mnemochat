@@ -115,8 +115,17 @@ class BehaviorConfig(BaseModel):
 
     reply_on_mention: bool = True
     names: list[str] = Field(default_factory=list)
-    reply_probability: float = 0.15
     reply_on_question: bool = False
+    reply_probability: float = 0.15
+    # 兴趣度（@/叫名字必回之外，按兴趣分决定是否接话；纯本地评分）
+    interest_enabled: bool = True
+    interest_threshold: float = 45          # 0-100，达到才回
+    interest_cooldown_seconds: float = 180  # 刚回复过则兴致下降
+    interest_cooldown_penalty: float = 40
+    interest_question_bonus: float = 20
+    interest_memory_bonus: float = 25       # 提到机器人记得的人/事
+    interest_jitter: float = 15             # 情绪抖动上限（时接时不接）
+    interest_min_length: int = 6            # 过短消息（哈哈/6）不构成话题
 
 
 class WindowConfig(BaseModel):
