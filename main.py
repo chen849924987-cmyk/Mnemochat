@@ -3,8 +3,11 @@
   python main.py --init          生成 config.yaml / .env 模板
   python main.py --sim [--mock]  控制台群聊模拟器（--mock 完全离线）
   python main.py --onebot        QQ 群聊模式（OneBot v11 / NapCat 等）
+  python main.py --telegram      Telegram 群聊模式（长轮询）
   python main.py --inspect       记忆管理台
   python main.py --reembed       切换嵌入模型后补齐存量向量
+  python main.py --export [文件] 导出记忆库备份 JSON（不含嵌入）
+  python main.py --import 文件   从备份恢复（按 id 合并，嵌入用 --reembed 重建）
 """
 
 from __future__ import annotations
@@ -25,8 +28,14 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--mock", action="store_true", help="离线模式：不调用任何外部 API")
     p.add_argument("--onebot", action="store_true",
                    help="QQ 群聊模式：作为 OneBot v11 正向 WS 客户端接入（NapCat/LLOneBot/Lagrange）")
+    p.add_argument("--telegram", action="store_true",
+                   help="Telegram 群聊模式：getUpdates 长轮询（无需公网）")
     p.add_argument("--inspect", action="store_true", help="记忆管理台")
     p.add_argument("--reembed", action="store_true", help="为当前嵌入模型补齐存量向量")
+    p.add_argument("--export", nargs="?", const="auto", metavar="文件",
+                   help="导出记忆库备份 JSON（缺省为 data/export_日期.json）")
+    p.add_argument("--import", dest="import_path", metavar="文件",
+                   help="从备份 JSON 恢复记忆库")
     p.add_argument("--init", action="store_true", help="生成 config.yaml 与 .env 模板")
     return p
 
@@ -90,10 +99,16 @@ def main() -> None:
         return
     cfg = _load(args)
 
-    if args.reembed:
+    if args.import_path:
+        asyncio.run(_cmd_import(cfg, args.import_path))
+    elif args.export is not None:
+        asyncio.run(_cmd_export(cfg, args.export))
+    elif args.reembed:
         asyncio.run(_cmd_reembed(cfg))
     elif args.onebot:
-        asyncio.run(_cmd_onebot(cfg, mock=args.mock))
+        asyncio.run(_run_adapter(cfg, mock=args.mock, kind="onebot"))
+    elif args.telegram:
+        asyncio.run(_run_adapter(cfg, mock=args.mock, kind="telegram"))
     elif args.inspect:
         from sim.inspect import run_inspect
 
@@ -104,10 +119,7 @@ def main() -> None:
         asyncio.run(run_sim(cfg, mock=args.mock, config_path=args.config))
 
 
-async def _cmd_onebot(cfg, mock: bool) -> None:
-    import logging
-
-    from adapter.onebot import OneBotV11Adapter
+async def _build_pipeline(cfg, mock: bool):
     from chat.llm import LLMChatClient
     from chat.mock import MockChatClient
     from chat.pipeline import BotPipeline
@@ -116,11 +128,7 @@ async def _cmd_onebot(cfg, mock: bool) -> None:
     from memory.store import MemoryStore
     from persona.card import PersonaCard
     from util.clock import Clock
-    from util.text import warmup
 
-    logging.basicConfig(level=logging.INFO,
-                        format="%(asctime)s %(name)s %(levelname)s %(message)s")
-    warmup()
     clock = Clock()
     store = MemoryStore(cfg.database)
     await store.init()
@@ -128,9 +136,30 @@ async def _cmd_onebot(cfg, mock: bool) -> None:
     embedder = HashEmbedder() if mock else create_embedder(cfg)
     persona = PersonaCard.load_yaml(cfg.persona_file)
     pipeline = BotPipeline(store, chat, embedder, persona, cfg, clock)
-    adapter = OneBotV11Adapter(pipeline, cfg, clock)
-    print(f"QQ 模式启动：{cfg.onebot.ws_url} · 角色 {persona.name} · "
-          f"{'MOCK' if mock else 'API'} · Ctrl+C 退出")
+    return pipeline, store
+
+
+async def _run_adapter(cfg, mock: bool, kind: str) -> None:
+    import logging
+
+    from util.text import warmup
+
+    logging.basicConfig(level=logging.INFO,
+                        format="%(asctime)s %(name)s %(levelname)s %(message)s")
+    warmup()
+    pipeline, store = await _build_pipeline(cfg, mock)
+    if kind == "onebot":
+        from adapter.onebot import OneBotV11Adapter
+
+        adapter = OneBotV11Adapter(pipeline, cfg, pipeline.clock)
+        endpoint = cfg.onebot.ws_url
+    else:
+        from adapter.telegram import TelegramAdapter
+
+        adapter = TelegramAdapter(pipeline, cfg, pipeline.clock)
+        endpoint = "Telegram long-polling"
+    print(f"{'QQ' if kind == 'onebot' else 'Telegram'} 模式启动：{endpoint} · "
+          f"角色 {pipeline.persona.name} · {'MOCK' if mock else 'API'} · Ctrl+C 退出")
     try:
         await adapter.run()
     except KeyboardInterrupt:
@@ -139,6 +168,41 @@ async def _cmd_onebot(cfg, mock: bool) -> None:
         await pipeline.flush_ingest()
         await store.close()
         print("已退出，记忆已保存。")
+
+
+async def _cmd_export(cfg, path: str) -> None:
+    import json
+    from datetime import datetime
+
+    from memory.store import MemoryStore
+
+    if path == "auto":
+        path = f"data/export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+    store = MemoryStore(cfg.database)
+    await store.init()
+    data = await store.export_all()
+    data["exported_at"] = datetime.now().isoformat()
+    data["version"] = 1
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=1)
+    await store.close()
+    print(f"已导出 {sum(len(v) for k, v in data.items() if isinstance(v, list))} 条记录 → {path}"
+          f"（不含嵌入，恢复后用 --reembed 重建）")
+
+
+async def _cmd_import(cfg, path: str) -> None:
+    import json
+
+    from memory.store import MemoryStore
+
+    with open(path, encoding="utf-8") as f:
+        data = json.load(f)
+    store = MemoryStore(cfg.database)
+    await store.init()
+    counts = await store.import_all(data)
+    await store.close()
+    print(f"已导入：{counts}（嵌入需用 --reembed 重建）")
 
 
 if __name__ == "__main__":

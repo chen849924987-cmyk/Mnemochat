@@ -18,6 +18,7 @@ from memory.ingest import IngestResult, Ingestor, format_window
 from memory.consolidate import ConsolidationResult, Consolidator
 from memory.models import MessageRecord
 from memory.recall import Recaller, RecallResult
+from persona.drift import DEFAULT_RE_ANCHOR, DriftDetector, DriftReport
 from persona.guard import build_reply_system
 
 if TYPE_CHECKING:
@@ -54,6 +55,10 @@ class BotPipeline:
         self._tasks: set[asyncio.Task] = set()
         self.last_ingest_result: IngestResult | None = None
         self.last_consolidation_result: ConsolidationResult | None = None
+        self.last_drift_report: DriftReport | None = None
+        self.drift_hint: str | None = None   # 漂移期间注入的角色校准提醒
+        self._drift = (DriftDetector(store, chat, persona, cfg, clock)
+                       if cfg.drift.enabled else None)
 
     # ---------- 对外入口 ----------
 
@@ -79,7 +84,8 @@ class BotPipeline:
             after_ts=self._window_reset_ts.get(group_id),
         )
         recall = await self.recaller.recall(group_id, self.persona, window)
-        system = build_reply_system(self.persona, recall, group_id, now)
+        system = build_reply_system(self.persona, recall, group_id, now,
+                                     extra_hint=self.drift_hint or "")
         user = self._render_window(window, trigger)
         reply = await self.chat.achat([
             {"role": "system", "content": system},
@@ -138,6 +144,18 @@ class BotPipeline:
 
     async def consolidate_now(self) -> ConsolidationResult:
         self.last_consolidation_result = await self.consolidator.run()
+        if self._drift is not None:
+            try:
+                report = await self._drift.check()
+                self.last_drift_report = report
+                if report.skipped:
+                    pass
+                elif report.drifted:
+                    self.drift_hint = report.suggestion or DEFAULT_RE_ANCHOR
+                else:
+                    self.drift_hint = None   # 恢复在线，撤销校准提醒
+            except Exception:
+                log.exception("人格漂移检测失败（不影响巩固结果）")
         return self.last_consolidation_result
 
     def reset_window(self, group_id: str) -> None:

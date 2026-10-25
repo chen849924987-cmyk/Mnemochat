@@ -136,6 +136,25 @@ class OnebotConfig(BaseModel):
     max_concurrent_replies: int = 4
 
 
+class TelegramConfig(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    bot_token: str = ""
+    poll_timeout: int = 30          # getUpdates 长轮询秒数
+    reply_to_message: bool = False  # 回复时是否引用原消息
+
+
+class DriftConfig(BaseModel):
+    """人格漂移检测：巩固时抽样评审机器人近期发言与角色卡的一致性。"""
+
+    model_config = ConfigDict(extra="ignore")
+
+    enabled: bool = True
+    min_samples: int = 4            # 样本不足则跳过本轮检测
+    sample_size: int = 12           # 每次抽样的机器人发言条数
+    adherence_threshold: float = 6.0  # 低于该贴合度判为漂移
+
+
 class BotConfig(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
@@ -151,6 +170,8 @@ class BotConfig(BaseModel):
     behavior: BehaviorConfig = BehaviorConfig()
     window: WindowConfig = WindowConfig()
     onebot: OnebotConfig = OnebotConfig()
+    telegram: TelegramConfig = TelegramConfig()
+    drift: DriftConfig = DriftConfig()
     sim_group_id: str = "sim-main"
 
 

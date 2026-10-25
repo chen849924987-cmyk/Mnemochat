@@ -19,7 +19,7 @@ import aiosqlite
 import numpy as np
 
 from util.text import seg
-from .models import MemoryRecord, MessageRecord, memory_from_row, message_from_row
+from .models import MemoryRecord, MessageRecord, _loads_or_default, memory_from_row, message_from_row
 
 _SCHEMA = Path(__file__).resolve().parent / "schema.sql"
 
@@ -82,6 +82,14 @@ class MemoryStore:
         params.append(limit)
         rows = await self.db.execute_fetchall(sql, params)
         return [message_from_row(r) for r in reversed(rows)]
+
+    async def recent_messages_by_user(self, user_id: str,
+                                      limit: int = 50) -> list[MessageRecord]:
+        rows = await self.db.execute_fetchall(
+            "SELECT * FROM messages WHERE user_id=? ORDER BY ts DESC, id DESC LIMIT ?",
+            (user_id, limit),
+        )
+        return [message_from_row(r) for r in rows]
 
     async def message_count(self, group_id: str | None = None) -> int:
         if group_id:
@@ -381,6 +389,81 @@ class MemoryStore:
     async def get_meta(self, key: str) -> str | None:
         rows = await self.db.execute_fetchall("SELECT value FROM meta WHERE key=?", (key,))
         return rows[0]["value"] if rows else None
+
+    # ---------- 人格漂移报告 ----------
+
+    async def add_drift_report(self, ts: float, adherence: float, drifted: bool,
+                               issues: list[str], suggestion: str,
+                               sample_size: int) -> int:
+        cur = await self.db.execute(
+            "INSERT INTO drift_reports(ts, adherence, drifted, issues, suggestion, sample_size) "
+            "VALUES(?,?,?,?,?,?)",
+            (ts, adherence, int(drifted),
+             json.dumps(issues, ensure_ascii=False), suggestion, sample_size),
+        )
+        await self.db.commit()
+        return cur.lastrowid
+
+    async def latest_drift_report(self) -> dict | None:
+        rows = await self.db.execute_fetchall(
+            "SELECT * FROM drift_reports ORDER BY id DESC LIMIT 1"
+        )
+        if not rows:
+            return None
+        row = rows[0]
+        row = dict(row)
+        row["issues"] = _loads_or_default(row["issues"], [])
+        row["drifted"] = bool(row["drifted"])
+        return row
+
+    # ---------- 导出 / 导入（备份迁移，不含嵌入——用 --reembed 重建） ----------
+
+    async def export_all(self) -> dict:
+        async def rows(table: str) -> list[dict]:
+            result = await self.db.execute_fetchall(f"SELECT * FROM {table}")
+            return [dict(r) for r in result]
+        return {
+            "messages": await rows("messages"),
+            "memories": await rows("memories"),
+            "memory_entities": await rows("memory_entities"),
+        }
+
+    async def import_all(self, data: dict) -> dict[str, int]:
+        counts: dict[str, int] = {}
+        for row in data.get("messages", []):
+            await self.db.execute(
+                "INSERT OR REPLACE INTO messages(id, group_id, user_id, user_name, content, ts, replied) "
+                "VALUES(:id, :group_id, :user_id, :user_name, :content, :ts, :replied)",
+                row,
+            )
+            counts["messages"] = counts.get("messages", 0) + 1
+        for row in data.get("memories", []):
+            await self.db.execute(
+                "INSERT OR REPLACE INTO memories(id, stage, kind, group_id, subject_user_id, "
+                "actor_user_id, content, keywords, entities, importance, emotion, visibility, "
+                "access_count, recurrence_count, last_accessed_at, created_at, strength, status, "
+                "superseded_by, archived_into, source_msg_ids) "
+                "VALUES(:id, :stage, :kind, :group_id, :subject_user_id, :actor_user_id, :content, "
+                ":keywords, :entities, :importance, :emotion, :visibility, :access_count, "
+                ":recurrence_count, :last_accessed_at, :created_at, :strength, :status, "
+                ":superseded_by, :archived_into, :source_msg_ids)",
+                row,
+            )
+            await self.db.execute(
+                "INSERT OR IGNORE INTO fts_memories(content_seg, keywords_seg, mem_id) VALUES(?,?,?)",
+                (seg(row["content"]), " ".join(_loads_or_default(row["keywords"], [])), row["id"]),
+            )
+            counts["memories"] = counts.get("memories", 0) + 1
+        for row in data.get("memory_entities", []):
+            await self.db.execute(
+                "INSERT OR IGNORE INTO memory_entities(name, group_id, memory_id) "
+                "VALUES(:name, :group_id, :memory_id)",
+                row,
+            )
+            counts["memory_entities"] = counts.get("memory_entities", 0) + 1
+        await self.db.commit()
+        self._touch()
+        return counts
 
     async def stats(self) -> dict:
         out: dict = {}

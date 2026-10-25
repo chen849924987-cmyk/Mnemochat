@@ -1,8 +1,14 @@
 # Mnemochat · 群聊长期记忆机器人
 
+[![CI](https://github.com/chen849924987-cmyk/Mnemochat/actions/workflows/ci.yml/badge.svg)](https://github.com/chen849924987-cmyk/Mnemochat/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Tests](https://img.shields.io/badge/tests-58%20passed-brightgreen)]()
+
+**English README → [README.en.md](README.en.md)**
+
 > 让 API 驱动的群聊机器人像人一样记住群友——会遗忘、会想起、越想起越牢固，但**永不删库**。
 
-一个自研的轻量记忆核心：分层漏斗（STM → Staging → LTM）+ 艾宾浩斯衰减 + 检索强化 + 混合检索（BM25/向量/实体图）+ 人格锚定。单文件 SQLite 存储，零外部服务依赖。已支持接入 **QQ 群**（OneBot v11 / NapCat / LLOneBot / Lagrange），也内置控制台模拟器用于离线开发验证。
+一个自研的轻量记忆核心：分层漏斗（STM → Staging → LTM）+ 艾宾浩斯衰减 + 检索强化 + 混合检索（BM25/向量/实体图）+ 人格锚定 + 人格漂移检测。单文件 SQLite 存储，零外部服务依赖。已支持接入 **QQ 群**（OneBot v11）与 **Telegram 群**，内置控制台模拟器用于离线开发验证。
 
 ## 为什么不是"定期摘要删库"
 
@@ -78,6 +84,31 @@ python main.py --onebot
 
 @机器人 必回；叫名字/小概率插话由 `behavior` 配置决定。所有群消息（包括机器人没回复的）都会进入记忆管线——先听，才记得。
 
+接入 Telegram 群：
+
+```bash
+# 1. @BotFather 创建机器人，拿到 token 填入 .env 的 TELEGRAM_BOT_TOKEN
+# 2. /setprivacy → Disable（关闭隐私模式，否则收不到未 @ 机器人的消息）
+# 3. 把机器人拉进群，然后：
+python main.py --telegram
+```
+
+## 备份与迁移
+
+```bash
+python main.py --export              # 导出 messages/memories/实体索引为 JSON（不含嵌入）
+python main.py --import 备份.json    # 按 id 合并恢复
+python main.py --reembed             # 恢复后重建向量（切换嵌入模型后同样用它）
+```
+
+## 人格漂移检测
+
+每次巩固后，抽样机器人近期发言与角色卡比对（评审模型打贴合度分）。判定漂移（客服腔、AI 助手腔、风格突变）时：
+- 报告落库（`drift_reports` 表，人格健康趋势可查）
+- 自动把"角色校准提醒"注入后续回复的 system prompt，直到下一轮检测恢复
+
+这是"人格存活"的最后防线：记忆系统保住了它知道什么，漂移检测保住它是谁。`drift.enabled: false` 可关闭。
+
 两分钟看懂它怎么"活"：
 
 ```
@@ -126,22 +157,22 @@ python main.py --onebot
 ## 项目结构
 
 ```
-main.py            入口：--sim / --onebot / --inspect / --reembed / --init
+main.py            入口：--sim / --onebot / --telegram / --inspect / --export / --import / --reembed / --init
 config.py          配置加载（yaml + ${ENV} 密钥插值）
-adapter/           平台适配层：QQ OneBot v11（正向 WS，断线重连）
+adapter/           平台适配层：QQ OneBot v11（正向 WS）· Telegram（长轮询）
 chat/              llm 客户端、mock 后端、群聊行为策略、回复主管线（多群安全）
 memory/            schema/store/ingest/consolidate/recall/decay
 embed/             api / local / mock 三通道嵌入
-persona/           角色卡、人格守卫（知识边界过滤、回忆注入格式）
+persona/           角色卡、人格守卫（知识边界/注入格式）、漂移检测
 sim/               控制台模拟器、记忆管理台、表格渲染
 personas/          角色卡（default.yaml）
-tests/             47 个离线测试（衰减/入库/检索/巩固/人格/多群/OneBot/端到端验收）
+tests/             58 个离线测试（衰减/入库/检索/巩固/人格/漂移/多群/适配器/导出/端到端验收）
 ```
 
 ## 测试
 
 ```bash
-python -m pytest tests/ -q      # 47 passed，全程离线
+python -m pytest tests/ -q      # 58 passed，全程离线
 ```
 
 验收用例 `tests/test_e2e_acceptance.py::test_remember_allergy_after_two_weeks`：说过过敏 → 快进 14 天 → 清空对话窗口 → 相关话题时以"约两周前"的口吻召回，且召回强化生效。
@@ -149,10 +180,11 @@ python -m pytest tests/ -q      # 47 passed，全程离线
 ## 路线图
 
 - [x] QQ 适配器（OneBot v11 正向 WebSocket：NapCat / LLOneBot / Lagrange）
-- [ ] Telegram / Discord 适配器（adapter 层已就位，按协议实现即可）
-- [ ] 人格漂移检测（巩固时抽样比对近期语气与角色卡）
+- [x] Telegram 适配器（getUpdates 长轮询，无需公网）
+- [x] 人格漂移检测（巩固时抽样评审 + 角色校准提醒闭环）
+- [x] 记忆导出/导入（备份迁移，`--export` / `--import`）
 - [ ] `visibility: self` 的机器人自我反思记忆
-- [ ] 记忆导出/导入、多角色多群管理台
+- [ ] Discord 适配器、多角色多群管理台、记忆可视化面板
 
 > ⚠️ 合规提示：非官方 QQ 协议实现（NapCat 等）存在违反腾讯服务条款导致账号风控的风险，请自行评估并使用小号。本仓库不包含任何协议实现，仅作为 OneBot 11 标准客户端。
 

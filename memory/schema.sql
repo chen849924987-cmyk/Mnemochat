@@ -83,3 +83,14 @@ CREATE TABLE IF NOT EXISTS meta (
     key   TEXT PRIMARY KEY,
     value TEXT
 );
+
+-- 人格漂移检测报告（巩固时抽样评审机器人近期发言与角色卡的一致性）
+CREATE TABLE IF NOT EXISTS drift_reports (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts          REAL NOT NULL,
+    adherence   REAL NOT NULL,           -- 0-10 与角色卡的贴合度
+    drifted     INTEGER NOT NULL,        -- 是否判定漂移
+    issues      TEXT NOT NULL DEFAULT '[]',
+    suggestion  TEXT NOT NULL DEFAULT '',
+    sample_size INTEGER NOT NULL DEFAULT 0
+);

@@ -53,6 +53,12 @@ class MockChatClient:
         if "归纳" in system or "语义记忆" in system:
             items = re.findall(r"^- (.+)$", user, flags=re.MULTILINE)
             return {"summary": f"综合观察：{'；'.join(items)}", "keywords": ["综合"]}
+        if "角色一致性" in system:
+            # 漂移评审：出现 AI 助手腔即判漂移
+            if re.search(r"AI助手|作为AI|为您服务|很乐意帮助", user):
+                return {"adherence": 3, "drifted": True,
+                        "issues": ["客服/AI助手腔"], "suggestion": "回到群友口吻"}
+            return {"adherence": 9, "drifted": False, "issues": [], "suggestion": ""}
         return {}
 
     @staticmethod

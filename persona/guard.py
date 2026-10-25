@@ -35,9 +35,12 @@ def render_memory_block(recall: "RecallResult", persona: "PersonaCard", now: flo
 
 
 def build_reply_system(persona: "PersonaCard", recall: "RecallResult",
-                       group_id: str, now: float) -> str:
+                       group_id: str, now: float,
+                       extra_hint: str = "") -> str:
     system = persona.build_system_prompt(group_id, now)
     block = render_memory_block(recall, persona, now)
     if block:
         system = f"{system}\n\n{block}"
+    if extra_hint:
+        system = f"{system}\n\n{extra_hint}"
     return system

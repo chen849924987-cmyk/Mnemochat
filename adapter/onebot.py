@@ -16,10 +16,9 @@ import asyncio
 import json
 import logging
 import re
-from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from adapter.base import GroupChatAdapter
+from adapter.base import GroupChatAdapter, GroupMessage
 
 if TYPE_CHECKING:
     from chat.pipeline import BotPipeline
@@ -28,14 +27,8 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
-
-@dataclass
-class GroupMessage:
-    group_id: str
-    user_id: str
-    user_name: str
-    text: str
-    mentioned_bot: bool = False
+__all__ = ["GroupMessage", "OneBotV11Adapter", "build_reply_segments",
+           "cq_to_text", "extract_self_id", "parse_group_message", "segments_to_text"]
 
 
 def segments_to_text(segments: list[dict], self_qq: str | None) -> tuple[str, bool]:
@@ -122,6 +115,7 @@ def parse_group_message(event: dict, self_qq: str | None) -> GroupMessage | None
         user_name=str(user_name),
         text=text,
         mentioned_bot=mentioned,
+        message_id=str(event.get("message_id", "")) or None,
     )
 
 

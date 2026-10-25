@@ -97,5 +97,21 @@ onebot:
   at_sender_on_reply: true    # 回复时是否 @ 发送者
   max_concurrent_replies: 4   # 并发回复上限（防 LLM 突发风暴）
 
+# ---------- Telegram 接入（可选） ----------
+# @BotFather 创建机器人拿 token；python main.py --telegram 启动（长轮询，无需公网）
+telegram:
+  bot_token: ${TELEGRAM_BOT_TOKEN}
+  poll_timeout: 30
+  reply_to_message: false
+
+# ---------- 人格漂移检测 ----------
+# 每次巩固后抽样评审机器人近期发言与角色卡的一致性；
+# 判定漂移时注入一段"角色校准提醒"到后续回复的 system prompt，直到恢复
+drift:
+  enabled: true
+  min_samples: 4
+  sample_size: 12
+  adherence_threshold: 6.0
+
 # 模拟器使用的群 ID
 sim_group_id: "sim-main"

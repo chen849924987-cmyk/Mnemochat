@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -18,6 +19,18 @@ if TYPE_CHECKING:
     from util.clock import Clock
 
 log = logging.getLogger(__name__)
+
+
+@dataclass
+class GroupMessage:
+    """平台无关的群消息（适配器把各自协议翻译成这个）。"""
+
+    group_id: str
+    user_id: str
+    user_name: str
+    text: str
+    mentioned_bot: bool = False
+    message_id: str | None = None
 
 
 class GroupChatAdapter:
