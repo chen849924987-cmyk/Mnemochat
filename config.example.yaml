@@ -1,0 +1,92 @@
+# ============================================================
+# 群聊记忆机器人配置
+# 复制为 config.yaml 后修改；密钥放 .env，此处用 ${环境变量名} 引用
+# ============================================================
+
+# 角色卡文件（personas/ 目录下）
+persona_file: personas/default.yaml
+
+# SQLite 数据库路径
+database: data/memory.db
+
+# ---------- 聊天模型（回复用） ----------
+llm:
+  base_url: https://api.deepseek.com/v1
+  api_key: ${DEEPSEEK_API_KEY}
+  model: deepseek-chat
+  temperature: 0.8
+  max_tokens: 1024
+
+# ---------- 提取模型（记忆提取/巩固用，可用便宜模型） ----------
+extractor:
+  base_url: https://api.deepseek.com/v1
+  api_key: ${DEEPSEEK_API_KEY}
+  model: deepseek-chat
+  temperature: 0.2
+  max_tokens: 2048
+
+# ---------- 嵌入（provider: api | local，切换后运行 --reembed 补齐旧向量） ----------
+embedding:
+  provider: api
+  api:
+    base_url: https://api.siliconflow.cn/v1
+    api_key: ${SILICONFLOW_API_KEY}
+    model: BAAI/bge-m3
+    dim: 1024
+    batch_size: 32
+  local:
+    # 需先安装: pip install -r requirements-local-embed.txt
+    model_name: BAAI/bge-small-zh-v1.5
+    dim: 512
+    device: cpu
+
+# ---------- 记忆写入 ----------
+ingest:
+  window_size: 8              # 每积累 N 条消息触发一次 LLM 提取
+  min_interval_seconds: 20    # 两次提取之间的最小间隔
+  dedup_threshold: 0.92       # 与既有记忆语义相似度超过该值 → 视为复现，强化旧记忆而非新建
+  noise_importance_below: 3   # 重要性低于该值且无实体、非偏好 → 丢弃
+
+# ---------- 巩固（"睡眠"） ----------
+consolidation:
+  interval_minutes: 30        # 自动检查周期
+  min_age_hours: 24           # staging 至少存活该时长才可能晋升
+  min_importance: 5           # 重要性达标可直接晋升；否则需要被复现过(recurrence_count>=1)
+  cluster_similarity: 0.80    # 睡眠巩固：情节记忆聚类阈值
+  min_cluster_size: 2         # 至少几条聚成一类才抽象为语义记忆
+  supersede_check_topk: 3     # 矛盾检测时对比同主体最相似的 K 条旧记忆
+
+# ---------- 检索 ----------
+recall:
+  top_k: 12                   # 注入上下文的记忆条数
+  query_recent_messages: 5    # 用最近几条消息构造查询
+  bm25_candidates: 50
+  vector_candidates: 50
+  entity_candidates: 20
+  staging_min_age_hours: 6    # staging 记忆至少存活该时长才参与召回（更近的还在对话窗口里）
+  weights:                    # salience 各因子权重
+    similarity: 0.35
+    bm25: 0.25
+    retention: 0.20
+    access: 0.10
+    importance_emotion: 0.10
+
+# ---------- 衰减（艾宾浩斯） ----------
+decay:
+  initial_base_days: 2.0      # 初始强度 S = base + importance
+  reinforce_factor: 1.25      # 每次被召回 S 乘以该系数
+  strength_cap_days: 365.0    # S 上限：记忆只会沉底，永不删除
+
+# ---------- 群聊行为 ----------
+behavior:
+  reply_on_mention: true      # @机器人 或 提到名字 时回复
+  names: []                   # 额外唤醒词（默认取角色卡名字），如 ["小满", "满满"]
+  reply_probability: 0.15     # 随机插话概率
+  reply_on_question: false    # 群里出现问句时是否回复
+
+# ---------- 对话窗口 ----------
+window:
+  recent_turns: 20            # 组 prompt 时携带的最近消息条数
+
+# 模拟器使用的群 ID
+sim_group_id: "sim-main"

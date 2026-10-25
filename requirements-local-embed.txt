@@ -1,0 +1,4 @@
+# 本地嵌入模型（可选）：pip install -r requirements-local-embed.txt
+# 完全离线的向量嵌入，无 API 费用，但需要下载约 100MB 模型 + torch 运行时
+-r requirements.txt
+sentence-transformers>=3.0
