@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/chen849924987-cmyk/Mnemochat/actions/workflows/ci.yml/badge.svg)](https://github.com/chen849924987-cmyk/Mnemochat/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-89%20passed-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-90%20passed-brightgreen)]()
 
 **English README → [README.en.md](README.en.md)**
 
@@ -139,7 +139,9 @@ python main.py --edit-persona personas/deepseek_whale.yaml
 机器人会**旁观收集**群友发的表情包（按内容 md5 去重，超过 `collect_max_kb` 的图视为照片不入库），每次出现都记录语境；巩固时批量**学习分类**——两种模式：
 
 - **语境学习**（默认，零额外成本）：根据表情包每次出现时的前后消息打标签（发三次"哈哈"时出现的图自动获得"搞笑"标签）
-- **视觉理解**（可选）：配置 OpenAI 兼容视觉端点（`sticker.vision.model`）后先用 VL 模型描述画面再打标，更准。DeepSeek 官方 chat API 是纯文本的——若你的端点提供视觉模型就填它，否则推荐硅基流动 Qwen-VL（和嵌入同一个 key）
+- **视觉理解**（可选）：打标前先让视觉模型描述画面，描述与语境一起参与打标，更准。标签判定始终由提取模型完成，"看图"两种接法：
+  - `sticker.vision.use_chat: true`——聊天模型本身是多模态（如 DeepSeek 4.1 Flash）→ **直接用聊天模型看图**，零额外配置；模型实际不支持图片时自动退回纯语境学习，功能不中断
+  - `use_chat: false` + `vision.model` 填独立 VL 模型——主模型是纯文本时另接一个视觉 API（推荐硅基流动 Qwen-VL，和嵌入同一个 key；设置页可配密钥）
 
 **发送**：模型看到系统提示里的可用分类清单，想发表情就在回复中嵌入 `[[sticker:分类]]` 标记；适配器先发图、间隔半秒再发文字（与角色卡的 send_sticker 规范一致），带发图冷却防刷屏。模拟器用 `/stickers` 查看图库。
 
@@ -212,13 +214,13 @@ editor/            人格卡修改器（本地网页：滑条调参/卡导入/�
 gui/               图形控制台（聊天模拟器+记忆管理+人格卡+配置生成，本地网页）
 sim/               控制台模拟器、记忆管理台、表格渲染
 personas/          角色卡（default 小满 / dafeiyu 大肥鱼 / deepseek_whale 小鲸鱼）
-tests/             89 个离线测试（衰减/入库/检索/巩固/人格/漂移/兴趣评分/多群/适配器/卡转换/表情包/导出/图形控制台/端到端验收）
+tests/             90 个离线测试（衰减/入库/检索/巩固/人格/漂移/兴趣评分/多群/适配器/卡转换/表情包/导出/图形控制台/端到端验收）
 ```
 
 ## 测试
 
 ```bash
-python -m pytest tests/ -q      # 89 passed，全程离线
+python -m pytest tests/ -q      # 90 passed，全程离线
 ```
 
 验收用例 `tests/test_e2e_acceptance.py::test_remember_allergy_after_two_weeks`：说过过敏 → 快进 14 天 → 清空对话窗口 → 相关话题时以"约两周前"的口吻召回，且召回强化生效。

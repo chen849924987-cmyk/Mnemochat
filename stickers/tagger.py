@@ -2,8 +2,10 @@
 
 - 语境学习（默认）：根据表情包每次出现时的前后消息推断语义标签
   （发三次"哈哈"时出现的图，自动获得"搞笑"标签）；
-- 视觉理解（可选）：配置 OpenAI 兼容视觉端点后，先让视觉模型描述画面，
-  描述与语境一起参与打标，标签更准。
+- 视觉理解（可选，两种接法）：
+  - vision.use_chat: true —— 聊天模型本身是多模态 → 直接用它看图（零额外配置）；
+  - vision.model 填独立 VL 端点 —— 主模型是纯文本时另接一个视觉 API；
+  看图得到的画面描述与语境一起参与打标（标签判定始终由提取模型完成），标签更准。
 """
 
 from __future__ import annotations
@@ -13,7 +15,7 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
-from config import BotConfig, StickerVisionConfig
+from config import BotConfig
 
 if TYPE_CHECKING:
     from chat.llm import ChatBackend
@@ -46,20 +48,21 @@ def _mime_of(data: bytes) -> str:
 
 
 class APIVisionDescriber:
-    """OpenAI 兼容视觉端点（硅基流动 Qwen-VL / 任何 VL 模型均可）。"""
+    """OpenAI 兼容视觉端点：可以是独立 VL 模型（硅基流动 Qwen-VL 等），
+    也可以是聊天模型本身（多模态模型开启 vision.use_chat 时，端点/密钥/模型名取自 llm 配置）。"""
 
-    def __init__(self, vcfg: StickerVisionConfig) -> None:
+    def __init__(self, base_url: str, api_key: str, model: str) -> None:
         from openai import AsyncOpenAI
 
-        self.cfg = vcfg
-        self._client = AsyncOpenAI(base_url=vcfg.base_url,
-                                   api_key=vcfg.api_key or "EMPTY",
+        self.model = model
+        self._client = AsyncOpenAI(base_url=base_url,
+                                   api_key=api_key or "EMPTY",
                                    max_retries=2, timeout=60.0)
 
     async def describe(self, image_bytes: bytes) -> str:
         b64 = base64.b64encode(image_bytes).decode("ascii")
         resp = await self._client.chat.completions.create(
-            model=self.cfg.model,
+            model=self.model,
             messages=[{
                 "role": "user",
                 "content": [
@@ -79,11 +82,17 @@ class MockVisionDescriber:
 
 
 def create_vision(cfg: BotConfig, mock: bool) -> VisionDescriber | None:
+    """视觉通道选择：mock > 聊天模型本身（use_chat，多模态）> 独立视觉端点 > 纯语境学习。"""
     if mock:
         return MockVisionDescriber()
-    if not cfg.sticker.vision.model:
+    v = cfg.sticker.vision
+    if v.use_chat:
+        # 聊天模型自己看图；若它实际是纯文本模型，describe 会抛错，
+        # StickerTagger 捕获后退回"语境描述 + 语境学习"，功能不中断
+        return APIVisionDescriber(cfg.llm.base_url, cfg.llm.api_key, cfg.llm.model)
+    if not v.model:
         return None   # 纯语境学习模式
-    return APIVisionDescriber(cfg.sticker.vision)
+    return APIVisionDescriber(v.base_url, v.api_key, v.model)
 
 
 class StickerTagger:

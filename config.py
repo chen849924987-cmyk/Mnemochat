@@ -165,13 +165,20 @@ class DriftConfig(BaseModel):
 
 
 class StickerVisionConfig(BaseModel):
-    """视觉理解（可选）：给表情包打画面描述。留空 model = 纯语境学习。"""
+    """视觉理解（可选）：给表情包打画面描述。
+
+    use_chat=True 时直接用聊天模型看图（聊天模型本身多模态时开启），
+    base_url/api_key/model 三项忽略；聊天模型实际不支持图片时
+    打标自动退回纯语境学习（describe 异常被 tagger 捕获）。
+    use_chat=False 且 model 留空 = 纯语境学习（零额外成本）。
+    """
 
     model_config = ConfigDict(extra="ignore")
 
+    use_chat: bool = False
     base_url: str = "https://api.siliconflow.cn/v1"
     api_key: str = ""
-    model: str = ""    # 例：Qwen/Qwen2.5-VL-32B-Instruct；空 = 不用视觉
+    model: str = ""    # 例：Qwen/Qwen2.5-VL-32B-Instruct；use_chat=False 且留空 = 不用视觉
 
 
 class StickerConfig(BaseModel):

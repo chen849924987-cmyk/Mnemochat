@@ -148,9 +148,11 @@ sticker:
   send_cooldown_seconds: @@STICKER_SEND_COOLDOWN@@
   tag_batch: @@STICKER_TAG_BATCH@@
   vision:
-    # 视觉理解可选：model 留空 = 纯语境学习（零额外成本）
+    # 视觉打标：use_chat=true 直接用聊天模型看图（多模态模型，下面三项忽略）；
+    # use_chat=false 且 model 留空 = 纯语境学习（零额外成本）
+    use_chat: @@VISION_USE_CHAT@@
     base_url: @@VISION_BASE_URL@@
-    api_key: ${SILICONFLOW_API_KEY}
+    api_key: @@VISION_KEY@@
     model: @@VISION_MODEL@@
 
 # 模拟器使用的群 ID
@@ -192,7 +194,9 @@ def values_from_config(cfg) -> dict:
         "LOCAL_MODEL": cfg.embedding.local.model_name,
         "LOCAL_DIM": cfg.embedding.local.dim,
         "LOCAL_DEVICE": cfg.embedding.local.device,
+        "VISION_USE_CHAT": cfg.sticker.vision.use_chat,
         "VISION_BASE_URL": cfg.sticker.vision.base_url,
+        "VISION_KEY": cfg.sticker.vision.api_key,
         "VISION_MODEL": cfg.sticker.vision.model,
         "REPLY_ON_MENTION": cfg.behavior.reply_on_mention,
         "NAMES": cfg.behavior.names,
@@ -266,7 +270,7 @@ FORM_KEYS = frozenset({
     "EXT_BASE_URL", "EXT_MODEL", "EXT_TEMPERATURE", "EXT_MAX_TOKENS",
     "EMBED_PROVIDER", "EMBED_KEY", "EMBED_BASE_URL", "EMBED_MODEL", "EMBED_DIM",
     "LOCAL_MODEL", "LOCAL_DIM", "LOCAL_DEVICE",
-    "VISION_BASE_URL", "VISION_MODEL",
+    "VISION_USE_CHAT", "VISION_BASE_URL", "VISION_KEY", "VISION_MODEL",
     "REPLY_ON_MENTION", "NAMES", "REPLY_ON_QUESTION", "REPLY_PROBABILITY",
     "INTEREST_ENABLED", "INTEREST_THRESHOLD", "INTEREST_COOLDOWN_SECONDS",
     "INTEREST_COOLDOWN_PENALTY", "INTEREST_QUESTION_BONUS", "INTEREST_MEMORY_BONUS",

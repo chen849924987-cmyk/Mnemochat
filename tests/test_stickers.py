@@ -92,3 +92,25 @@ async def test_untagged_list_has_contexts(store, cfg, clock):
     assert len(batch) == 1
     assert batch[0]["id"] == sid
     assert any("小明" in c for c in batch[0]["contexts"])
+
+
+def test_create_vision_channels(cfg):
+    """看图通道选择：mock > 独立视觉端点 > 纯语境学习；use_chat 时聊天模型优先。"""
+    from stickers.tagger import APIVisionDescriber, create_vision
+
+    assert isinstance(create_vision(cfg, mock=True), MockVisionDescriber)
+
+    cfg.sticker.vision.use_chat = False
+    cfg.sticker.vision.model = ""
+    assert create_vision(cfg, mock=False) is None          # 纯语境学习
+
+    cfg.sticker.vision.base_url = "https://vl.example.com/v1"
+    cfg.sticker.vision.model = "Qwen/Qwen2.5-VL-32B-Instruct"
+    d = create_vision(cfg, mock=False)
+    assert isinstance(d, APIVisionDescriber)
+    assert d.model == cfg.sticker.vision.model             # 独立 VL 端点
+
+    cfg.sticker.vision.use_chat = True
+    d = create_vision(cfg, mock=False)
+    assert isinstance(d, APIVisionDescriber)
+    assert d.model == cfg.llm.model                        # 多模态聊天模型接管
