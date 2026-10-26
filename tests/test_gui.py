@@ -6,6 +6,7 @@ import json
 import shutil
 import threading
 import urllib.error
+import urllib.parse
 import urllib.request
 from http.server import ThreadingHTTPServer
 from pathlib import Path
@@ -231,3 +232,74 @@ def test_persona_endpoints(app, tmp_path):
 
     lst = _get(app.port, "/api/personas")
     assert lst["ok"] and len(lst["items"]) >= 3
+
+
+def test_visit_engine_and_universes(app, tmp_path):
+    """串门：客卡用自己的记忆库发言，两边都记住这次会面；主卡接话。"""
+    from config import SocialVisit
+
+    app.cfg.social.visits = [SocialVisit(
+        persona_file="personas/dafeiyu.yaml",
+        database=str(tmp_path / "guest.db"))]
+    r = _post(app.port, "/api/visit", {})
+    assert r["ok"], r
+    assert r["guest"] == "大肥鱼" and r["text"]
+    assert r["host"] == "小满" and r["reply"]          # 主卡接话
+
+    # 主库记住了客人的发言
+    hist = _get(app.port, "/api/history?limit=50")["items"]
+    assert any(m["name"] == "大肥鱼" for m in hist)
+    # 客库是独立文件，且记下了自己的串门发言
+    assert (tmp_path / "guest.db").exists()
+    import asyncio
+    import aiosqlite
+
+    async def _count():
+        db = await aiosqlite.connect(tmp_path / "guest.db")
+        try:
+            rows = await db.execute_fetchall(
+                "SELECT COUNT(*) FROM messages WHERE user_name='大肥鱼'")
+            return rows[0][0]
+        finally:
+            await db.close()
+    assert app.bridge.run(_count()) >= 1
+
+    # 宇宙总览：主卡 + 客卡，各自统计
+    uni = _get(app.port, "/api/universes")
+    assert uni["ok"] and len(uni["items"]) == 2
+    labels = {u["label"] for u in uni["items"]}
+    assert any("大肥鱼" in x for x in labels)
+    guest = next(u for u in uni["items"] if "大肥鱼" in u["label"])
+    assert guest["exists"] and not guest["active"] and guest["stats"]
+
+    # 按宇宙查看记忆 + 危险区清空（先备份）
+    mems = _get(app.port, "/api/memories?stage=all&universe="
+                + urllib.parse.quote(guest["path"]))
+    assert mems["ok"]
+    bad = _get(app.port, "/api/memories?stage=all&universe=data/evil.db")
+    assert not bad["ok"]                               # 未知路径拒绝
+
+    clear = _post(app.port, "/api/memory/clear", {"path": guest["path"]})
+    assert clear["ok"] and clear["backup_records"] >= 1
+    assert Path(clear["backup"]).exists()
+    after = _get(app.port, "/api/memories?stage=all&universe="
+                 + urllib.parse.quote(guest["path"]))
+    assert after["ok"] and after["items"] == []
+
+
+def test_social_visits_config_roundtrip(app, tmp_path):
+    """串门关系以块状 YAML 回写，重载后结构保真。"""
+    vals = _get(app.port, "/api/config")["values"]
+    posted = dict(vals)
+    posted["SOCIAL_VISITS"] = [
+        {"persona_file": "personas/dafeiyu.yaml",
+         "database": "data/memory_dafeiyu.db", "every_hours": 6}]
+    resp = _post(app.port, "/api/config",
+                 {"values": posted, "mode": "mock", "apply": False})
+    assert resp["ok"], resp
+    cfg = load_config(tmp_path / "config.yaml")
+    assert len(cfg.social.visits) == 1
+    v = cfg.social.visits[0]
+    assert v.persona_file == "personas/dafeiyu.yaml"
+    assert v.database == "data/memory_dafeiyu.db"
+    assert v.every_hours == 6

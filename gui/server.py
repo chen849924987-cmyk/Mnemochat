@@ -3,10 +3,10 @@
   python main.py --gui [--mock] [--port 8765]
 
 一个页面四个标签页：
-- 聊天：群聊模拟器（发言/兴趣评分明细/时间快进/巩固/清窗口，含表情包发图）
-- 记忆：记忆库浏览、召回预演、统计
+- 聊天：群聊模拟器（发言/兴趣评分明细/时间快进/巩固/清窗口/串门，含表情包发图）
+- 记忆：多记忆宇宙总览与切换（主卡 + 各串门客卡）、召回预演、清空（先备份）
 - 人格：角色卡编辑（复用人格卡修改器，滑条/酒馆卡导入/热重载）
-- 设置：聊天/提取/嵌入模型与密钥、群聊行为、平台接入——保存即生成
+- 设置：聊天/提取/嵌入模型与密钥、群聊行为、串门关系、平台接入——保存即生成
   config.yaml 与 .env，可一键应用到运行中的机器人（无需改代码、无需重启）
 
 架构：HTTP 线程 + 常驻 asyncio 循环（桥接 BotPipeline）；仅监听 127.0.0.1。
@@ -17,6 +17,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+import logging
 import threading
 import time
 import webbrowser
@@ -30,6 +31,8 @@ from gui.config_io import (ENV_CHAT_KEY, ENV_EMBED_KEY, ENV_TELEGRAM,
                            values_from_config, write_env)
 from persona.card import PersonaCard
 from persona.convert import extract_card_from_png, st_card_to_persona
+
+log = logging.getLogger(__name__)
 
 _ROOT = Path(__file__).resolve().parent.parent
 _PAGE = Path(__file__).resolve().parent / "page.html"
@@ -77,6 +80,30 @@ class GUIApp:
         except Exception:
             pass
         self.bridge.run(self._build(cfg, self.mock))
+        self._last_visit: dict[int, float] = {}     # 串门关系下标 -> 上次串门时刻
+        self._visit_task = asyncio.run_coroutine_threadsafe(
+            self._visit_loop(), self.bridge.loop)
+
+    async def _visit_loop(self) -> None:
+        """串门自动调度：每分钟检查一次到期关系（间隔与关系在「设置」页配置）。"""
+        from social.visits import due_visits, perform_visit
+
+        while True:
+            await asyncio.sleep(60)
+            try:
+                due = due_visits(self.cfg, self.pipeline.clock, self._last_visit)
+            except Exception:
+                continue
+            for i in due:
+                self._last_visit[i] = self.pipeline.clock.now()
+                try:
+                    res = await perform_visit(self.pipeline, self.store, self.cfg,
+                                              self.pipeline.clock,
+                                              self.cfg.social.visits[i],
+                                              mock=self.mock)
+                    log.info("自动串门：%s 来到了 %s", res["guest"], res["host"])
+                except Exception:
+                    log.exception("自动串门失败（关系 #%s）", i)
 
     def _resolve(self, p: str | Path) -> Path:
         path = Path(p)
@@ -114,6 +141,10 @@ class GUIApp:
 
             await close_stores(self.pipeline, self.store)
 
+        try:
+            self._visit_task.cancel()
+        except Exception:
+            pass
         try:
             self.bridge.run(_fin())
         finally:
@@ -199,27 +230,26 @@ class GUIApp:
                           "access": m.access_count, "anchor_ts": m.anchor_ts})
         return {"ok": True, "items": items, "ts": pipe.clock.now()}
 
-    async def api_memories(self, stage: str, q: str, limit: int) -> dict:
-        gid = self.cfg.sim_group_id
-        rows = await self.store.list_memories(
-            group_id=gid, stage=None if stage == "all" else stage,
-            status=None, limit=limit)
-        now = self.pipeline.clock.now()
-        from memory import decay
+    async def api_memories(self, stage: str, q: str, limit: int,
+                           universe: str = "") -> dict:
+        return await self.api_memories_of(universe, stage, q, limit)
 
-        out = []
-        for m in rows:
-            if q and q not in m.content:
-                continue
-            ret = decay.retention((now - m.anchor_ts) / 86400.0, m.strength)
-            out.append({"id": m.id, "stage": m.stage, "kind": m.kind,
-                        "status": m.status, "content": m.content,
-                        "subject": m.subject_user_id,
-                        "importance": m.importance, "emotion": m.emotion,
-                        "retention": round(ret, 3), "strength": round(m.strength, 1),
-                        "access": m.access_count, "recurrence": m.recurrence_count,
-                        "created_at": m.created_at})
-        return {"ok": True, "items": out, "now": now}
+    async def api_visit(self, index: int | None) -> dict:
+        """手动触发一次串门（缺省选第一条关系）；自动调度共用同一引擎。"""
+        from social.visits import perform_visit
+
+        visits = self.cfg.social.visits
+        if not visits:
+            return {"ok": False, "error": "还没有配置串门关系——到「设置 · 社交与串门」添加"}
+        if index is None:
+            index = next((i for i, v in enumerate(visits)), 0)
+        if not (0 <= index < len(visits)):
+            return {"ok": False, "error": f"串门关系下标越界：{index}"}
+        res = await perform_visit(self.pipeline, self.store, self.cfg,
+                                  self.pipeline.clock, visits[index],
+                                  mock=self.mock)
+        self._last_visit[index] = self.pipeline.clock.now()
+        return {"ok": True, **res}
 
     async def api_history(self, limit: int) -> dict:
         rows = await self.store.recent_messages(self.cfg.sim_group_id, limit)
@@ -232,8 +262,16 @@ class GUIApp:
         stats = await self.store.stats()
         stage = stats.get("stage", {})
         env = read_env(self.env_path)
+        guests = []
+        for v in self.cfg.social.visits:
+            try:
+                guests.append((load_persona(self._resolve(v.persona_file))
+                               or {}).get("name") or Path(v.persona_file).stem)
+            except Exception:
+                guests.append(Path(v.persona_file).stem)
         return {"ok": True, "mock": self.mock,
                 "persona": pipe.persona.name, "greeting": pipe.persona.greeting,
+                "guests": guests,
                 "persona_file": self.cfg.persona_file,
                 "group_id": self.cfg.sim_group_id, "database": self.cfg.database,
                 "sticker_database": (self.cfg.sticker.database
@@ -338,6 +376,127 @@ class GUIApp:
         self.editor_state = EditorState(card)
         return {"ok": True, "path": str(card), "persona": data}
 
+    # ---------- 多记忆宇宙（主卡 + 串门客卡） ----------
+
+    def _universe_defs(self) -> list[tuple[str, str]]:
+        """[(标签, 记忆库路径)]：主卡 + 各串门客卡（去重）。"""
+        entries = [(f"{self.pipeline.persona.name}（当前主卡）",
+                    str(Path(self.cfg.database)))]
+        for v in self.cfg.social.visits:
+            path = str(Path(v.database or self.cfg.database))
+            try:
+                name = (load_persona(self._resolve(v.persona_file)) or {}).get(
+                    "name") or Path(v.persona_file).stem
+            except Exception:
+                name = Path(v.persona_file).stem
+            entries.append((name, path))
+        seen: set[str] = set()
+        out = []
+        for label, path in entries:
+            if path in seen:
+                continue
+            seen.add(path)
+            out.append((label, path))
+        return out
+
+    async def api_universes(self) -> dict:
+        from memory.store import MemoryStore
+
+        items = []
+        for label, path in self._universe_defs():
+            exists = Path(path).exists()
+            stats = None
+            if exists:
+                s = MemoryStore(path)
+                await s.init(with_stickers=False)
+                try:
+                    st = await s.stats()
+                    stats = {"messages": st.get("messages", 0),
+                             "staging": st.get("stage", {}).get("staging", 0),
+                             "ltm": st.get("stage", {}).get("ltm", 0)}
+                finally:
+                    await s.close()
+            items.append({"label": label, "path": path, "exists": exists,
+                          "active": path == str(Path(self.cfg.database)),
+                          "stats": stats})
+        stickers = None
+        if self.pipeline.sticker_lib is not None:
+            stickers = await self.pipeline.sticker_lib.stats()
+        return {"ok": True, "items": items, "stickers": stickers}
+
+    def _known_db_paths(self) -> set[str]:
+        return {str(Path(p)) for _, p in self._universe_defs()}
+
+    async def api_memories_of(self, path: str, stage: str, q: str,
+                              limit: int) -> dict:
+        """查看指定记忆宇宙（须为已知库路径）；默认当前主卡。"""
+        from memory import decay
+        from memory.store import MemoryStore
+
+        if path:
+            path = str(Path(path))
+            if path not in self._known_db_paths():
+                return {"ok": False, "error": "未知的记忆库路径"}
+        gid = self.cfg.sim_group_id
+        s = self.store
+        transient = bool(path and path != str(Path(self.cfg.database)))
+        if transient:
+            s = MemoryStore(path)
+            await s.init(with_stickers=False)
+        try:
+            rows = await s.list_memories(
+                group_id=gid, stage=None if stage == "all" else stage,
+                status=None, limit=limit)
+        finally:
+            if transient:
+                await s.close()
+        now = self.pipeline.clock.now()
+        out = []
+        for m in rows:
+            if q and q not in m.content:
+                continue
+            ret = decay.retention((now - m.anchor_ts) / 86400.0, m.strength)
+            out.append({"id": m.id, "stage": m.stage, "kind": m.kind,
+                        "status": m.status, "content": m.content,
+                        "subject": m.subject_user_id,
+                        "importance": m.importance, "emotion": m.emotion,
+                        "retention": round(ret, 3), "strength": round(m.strength, 1),
+                        "access": m.access_count, "recurrence": m.recurrence_count,
+                        "created_at": m.created_at})
+        return {"ok": True, "items": out, "now": now}
+
+    async def api_memory_clear(self, path: str) -> dict:
+        """清空一个记忆宇宙（先自动备份 JSON）。只接受已知库路径。"""
+        import json as _json
+        from datetime import datetime
+
+        from memory.store import MemoryStore
+
+        path = str(Path(path))
+        if path not in self._known_db_paths():
+            return {"ok": False, "error": "未知的记忆库路径"}
+        if not Path(path).exists():
+            return {"ok": False, "error": "记忆库不存在"}
+        s = MemoryStore(path)
+        await s.init(with_stickers=False)
+        try:
+            data = await s.export_all()
+            n = sum(len(v) for k, v in data.items() if isinstance(v, list))
+            backup = Path(path).parent / (
+                f"backup_{Path(path).stem}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json")
+            backup.write_text(_json.dumps(data, ensure_ascii=False, indent=1),
+                              encoding="utf-8")
+            counts = {}
+            for table in ("messages", "memories", "embeddings", "memory_entities",
+                          "fts_memories", "drift_reports"):
+                cur = await s.db.execute(f"DELETE FROM {table}")
+                counts[table] = cur.rowcount or 0
+            await s.db.commit()
+        finally:
+            await s.close()
+        return {"ok": True, "backup": str(backup), "backup_records": n,
+                "cleared": counts}
+
 
 def load_config_safe(path: Path, fallback):
     """读取磁盘上的最新配置；文件不存在或损坏时回退到当前内存配置。"""
@@ -406,8 +565,11 @@ def make_handler(app: GUIApp) -> type[BaseHTTPRequestHandler]:
                     stage = qs.get("stage", ["all"])[0]
                     q = qs.get("q", [""])[0]
                     limit = int(qs.get("limit", ["300"])[0])
+                    universe = qs.get("universe", [""])[0]
                     return self._json(app.bridge.run(
-                        app.api_memories(stage, q, limit)))
+                        app.api_memories(stage, q, limit, universe)))
+                if url.path == "/api/universes":
+                    return self._json(app.bridge.run(app.api_universes()))
                 if url.path == "/api/persona":
                     try:
                         return self._json({
@@ -455,6 +617,13 @@ def make_handler(app: GUIApp) -> type[BaseHTTPRequestHandler]:
                     if not text:
                         return self._json({"ok": False, "error": "召回文本为空"}, 400)
                     return self._json(app.bridge.run(app.api_recall(text)))
+                if self.path == "/api/visit":
+                    index = payload.get("index")
+                    return self._json(app.bridge.run(app.api_visit(
+                        None if index is None else int(index))))
+                if self.path == "/api/memory/clear":
+                    return self._json(app.bridge.run(app.api_memory_clear(
+                        str(payload.get("path") or ""))))
                 if self.path == "/api/config":
                     return self._json(app.bridge.run(app.api_config_save(
                         payload.get("values") or {},

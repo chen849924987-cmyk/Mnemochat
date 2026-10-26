@@ -195,6 +195,29 @@ class StickerConfig(BaseModel):
     vision: StickerVisionConfig = StickerVisionConfig()
 
 
+class SocialVisit(BaseModel):
+    """一条串门关系：guest 角色卡定期到主卡所在的模拟群露面。
+
+    database 留空 = 客人与主卡共用记忆库（只是换人格出场）；
+    填路径 = 客人有自己的记忆宇宙，串门经历记在它自己的库里。"""
+
+    model_config = ConfigDict(extra="ignore")
+
+    persona_file: str
+    database: str = ""
+    every_hours: float = 8
+
+
+class SocialConfig(BaseModel):
+    """社交与串门：多角色卡互访，长出"活人交际"。"""
+
+    model_config = ConfigDict(extra="ignore")
+
+    enabled: bool = True
+    visits: list[SocialVisit] = Field(default_factory=list)
+    host_replies: bool = True   # 客人发言后，主卡是否接话（产生真实互动）
+
+
 class BotConfig(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
@@ -217,6 +240,7 @@ class BotConfig(BaseModel):
     telegram: TelegramConfig = TelegramConfig()
     drift: DriftConfig = DriftConfig()
     sticker: StickerConfig = StickerConfig()
+    social: SocialConfig = SocialConfig()
     sim_group_id: str = "sim-main"
 
 

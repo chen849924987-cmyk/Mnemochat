@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/chen849924987-cmyk/Mnemochat/actions/workflows/ci.yml/badge.svg)](https://github.com/chen849924987-cmyk/Mnemochat/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-94%20passed-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-96%20passed-brightgreen)]()
 
 **English README → [README.en.md](README.en.md)**
 
@@ -100,9 +100,9 @@ python main.py --gui [--mock] [--port 8765]
 本地网页一体化入口，四个标签页（零额外依赖，仅监听 127.0.0.1，自动打开浏览器）：
 
 - **聊天**：群聊模拟器——以任意群友身份发言，机器人按兴趣评分决定接不接话（未回话时显示兴致明细）；⏩ 时间快进、手动巩固、立即入库、清空对话窗口都在页面上点；
-- **记忆**：记忆库浏览（保留率/强度/召回/复现一目了然）、召回预演、统计；
+- **记忆**：多记忆宇宙总览与切换（主卡 + 各串门客卡）、记忆库浏览（保留率/强度/召回/复现一目了然）、召回预演、危险区清空（先自动备份）；
 - **人格**：内置人格卡修改器——滑条调性格参数、改兴趣词、导入酒馆卡、保存即热重载；
-- **设置**：聊天/提取/嵌入模型与密钥、群聊行为（兴趣门槛等）、QQ/Telegram 接入——**保存即生成 config.yaml 与 .env，可一键"应用到运行中机器人"热重建管线，全程不用改代码、不用重启**。界面未展示的高级调参项（ingest/consolidation/recall/decay）保存时从原配置回填，手工调过的不会被覆盖。
+- **设置**：聊天/提取/嵌入模型与密钥、群聊行为（兴趣门槛等）、串门关系、QQ/Telegram 接入——**保存即生成 config.yaml 与 .env，可一键"应用到运行中机器人"热重建管线，全程不用改代码、不用重启**。界面未展示的高级调参项（ingest/consolidation/recall/decay）保存时从原配置回填，手工调过的不会被覆盖。
 
 接入 Telegram 群：
 
@@ -146,6 +146,27 @@ python main.py --edit-persona personas/deepseek_whale.yaml
 **发送**：模型看到系统提示里的可用分类清单，想发表情就在回复中嵌入 `[[sticker:分类]]` 标记；适配器先发图、间隔半秒再发文字（与角色卡的 send_sticker 规范一致），带发图冷却防刷屏。模拟器用 `/stickers` 查看图库。
 
 **遗忘**（表情包版）：收集按内容 md5 去重不会重复占空间，此外有两层新陈代谢——发送选取的热度按"使用次数 / 时间距离"衰减，久未出现的冷梗自动沉底（软遗忘）；巩固时清理群里 `sticker.retain_days`（默认 90 天，0=关闭）没出现过的梗，删除文件与记录（硬遗忘——表情包没有记忆那种溯源价值，这里破例删库是合理的）。
+
+## 社交与串门（多角色卡互访）
+
+配合「每张角色卡独立记忆库」，让不同人格长出活人交际：
+
+```yaml
+social:
+  enabled: true
+  host_replies: true      # 客人发言后主卡接话
+  visits:
+    - persona_file: personas/dafeiyu.yaml
+      database: data/memory_dafeiyu.db   # 客人自己的记忆宇宙（留空=与主卡共用）
+      every_hours: 8
+```
+
+- 客卡用自己的记忆库回应主卡群里正在进行的话题，发一条自然的串门消息；
+- 发言**两边都记住**：客库记自己的经历，主库把它当"来自客人的消息"走完整回复管线；
+- 关系不是写死的——串门几次后双方各自记得对方，之后自然互相提起；
+- GUI「设置 · 社交与串门」可视化维护关系列表，「聊天」页 👋 按钮随时手动触发；
+- 身份边界：模拟器/GUI 的群是虚拟的，客人以自己的名字出现；QQ 模式单账号无法分身，
+  跨号串门请用双开双卡同群方案（两个实例各自带卡与库）。
 
 ## 人格漂移检测
 
@@ -217,13 +238,13 @@ editor/            人格卡修改器（本地网页：滑条调参/卡导入/�
 gui/               图形控制台（聊天模拟器+记忆管理+人格卡+配置生成，本地网页）
 sim/               控制台模拟器、记忆管理台、表格渲染
 personas/          角色卡（default 小满 / dafeiyu 大肥鱼 / deepseek_whale 小鲸鱼）
-tests/             94 个离线测试（衰减/入库/检索/巩固/人格/漂移/兴趣评分/多群/适配器/卡转换/表情包/导出/图形控制台/端到端验收）
+tests/             96 个离线测试（衰减/入库/检索/巩固/人格/漂移/兴趣评分/多群/适配器/卡转换/表情包/导出/图形控制台/端到端验收）
 ```
 
 ## 测试
 
 ```bash
-python -m pytest tests/ -q      # 94 passed，全程离线
+python -m pytest tests/ -q      # 96 passed，全程离线
 ```
 
 验收用例 `tests/test_e2e_acceptance.py::test_remember_allergy_after_two_weeks`：说过过敏 → 快进 14 天 → 清空对话窗口 → 相关话题时以"约两周前"的口吻召回，且召回强化生效。

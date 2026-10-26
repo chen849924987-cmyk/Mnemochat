@@ -145,6 +145,14 @@ drift:
   sample_size: 12
   adherence_threshold: 6.0
 
+# ---------- 社交与串门（多角色卡互访） ----------
+# 客卡定期到主卡所在的模拟群串门：客人用自己的卡+记忆库，两边都记住这次会面；
+# GUI「聊天」页可手动触发，自动调度按 every_hours 间隔
+social:
+  enabled: @@SOCIAL_ENABLED@@
+  host_replies: @@SOCIAL_HOST_REPLIES@@
+  visits: @@SOCIAL_VISITS@@
+
 # ---------- 表情包（旁观收集 → 学习分类 → 聊天时按分类发图） ----------
 sticker:
   enabled: @@STICKER_ENABLED@@
@@ -175,6 +183,18 @@ def _yml(value) -> str:
     out = "\n".join(line for line in out.splitlines()
                     if line.strip() != "...").strip()
     return out
+
+
+def _render(key: str, value) -> str:
+    if key == "SOCIAL_VISITS":
+        # 串门关系列表：块状 YAML（可读、可手改），列表项与 visits 键同缩进
+        if not value:
+            return "[]"
+        dump = yaml.safe_dump(value, allow_unicode=True, sort_keys=False,
+                              default_flow_style=False, width=10**6)
+        return "\n" + "\n".join("  " + line
+                                for line in dump.strip().splitlines())
+    return _yml(value)
 
 
 def values_from_config(cfg) -> dict:
@@ -226,6 +246,9 @@ def values_from_config(cfg) -> dict:
         "TG_POLL_TIMEOUT": cfg.telegram.poll_timeout,
         "TG_REPLY_TO_MESSAGE": cfg.telegram.reply_to_message,
         "DRIFT_ENABLED": cfg.drift.enabled,
+        "SOCIAL_ENABLED": cfg.social.enabled,
+        "SOCIAL_HOST_REPLIES": cfg.social.host_replies,
+        "SOCIAL_VISITS": [v.model_dump() for v in cfg.social.visits],
         "STICKER_ENABLED": cfg.sticker.enabled,
         "STICKER_DATABASE": cfg.sticker.database,
         "STICKER_MAX_KB": cfg.sticker.collect_max_kb,
@@ -263,7 +286,7 @@ def render_config(values: dict) -> str:
     """表单值 → config.yaml 文本。缺任一占位符键直接报错（防拼错键名）。"""
     out = _YAML_TEMPLATE
     for key, val in values.items():
-        out = out.replace(f"@@{key}@@", _yml(val))
+        out = out.replace(f"@@{key}@@", _render(key, val))
     if "@@" in out:
         leftover = out[out.index("@@"):out.index("@@") + 40]
         raise ValueError(f"配置值缺少字段：{leftover}")
@@ -288,9 +311,10 @@ FORM_KEYS = frozenset({
     "ONEBOT_WS_URL", "ONEBOT_TOKEN",
     "TELEGRAM_TOKEN", "TG_POLL_TIMEOUT", "TG_REPLY_TO_MESSAGE",
     "DRIFT_ENABLED",
-        "STICKER_ENABLED", "STICKER_MAX_KB", "STICKER_RETAIN_DAYS",
-        "PER_PERSONA_MEMORY", "STICKER_DATABASE",
-    })
+    "SOCIAL_ENABLED", "SOCIAL_HOST_REPLIES", "SOCIAL_VISITS",
+    "STICKER_ENABLED", "STICKER_MAX_KB", "STICKER_RETAIN_DAYS",
+    "PER_PERSONA_MEMORY", "STICKER_DATABASE",
+})
 
 
 def merge_config_values(cfg, posted: dict) -> dict:
