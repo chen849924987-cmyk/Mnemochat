@@ -72,6 +72,7 @@ class BotPipeline:
         self.last_ingest_result: IngestResult | None = None
         self.last_consolidation_result: ConsolidationResult | None = None
         self.last_drift_report: DriftReport | None = None
+        self.last_stickers_pruned: int = 0   # 每轮遗忘清理的表情包数
         self.drift_hint: str | None = None   # 漂移期间注入的角色校准提醒
         self._drift = (DriftDetector(store, chat, persona, cfg, clock)
                        if cfg.drift.enabled else None)
@@ -225,6 +226,12 @@ class BotPipeline:
                 await self._sticker_tagger.run()
             except Exception:
                 log.exception("表情包打标失败（不影响巩固结果）")
+            if self.cfg.sticker.retain_days > 0 and self.sticker_lib is not None:
+                try:
+                    self.last_stickers_pruned = await self.sticker_lib.prune(
+                        self.clock.now(), self.cfg.sticker.retain_days)
+                except Exception:
+                    log.exception("表情包遗忘清理失败（不影响巩固结果）")
         return self.last_consolidation_result
 
     def reset_window(self, group_id: str) -> None:

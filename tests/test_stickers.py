@@ -114,3 +114,53 @@ def test_create_vision_channels(cfg):
     d = create_vision(cfg, mock=False)
     assert isinstance(d, APIVisionDescriber)
     assert d.model == cfg.llm.model                        # 多模态聊天模型接管
+
+
+def _lib_varied(store, cfg):
+    """每个 URL 一份不同字节的数据（同图重发才共享 md5，测遗忘/排序需要多张不同的图）。"""
+    async def fake_download(url: str) -> bytes | None:
+        return PNG + url.encode()
+    return StickerLibrary(store, cfg, downloader=fake_download)
+
+
+async def test_prune_forgets_stale_stickers(store, cfg, clock):
+    """遗忘：群里 retain_days 天没出现的梗删除行、语境与文件；近期出现的保留。"""
+    lib = _lib_varied(store, cfg)
+    now = clock.now()
+    sid_old = await lib.collect("http://x/old.png", "g1", "老王", now - 120 * 86400)
+    sid_new = await lib.collect("http://x/new.png", "g1", "小明", now)
+    assert sid_old != sid_new
+    old_path = await lib.file_path(sid_old)
+    assert Path(old_path).exists()
+
+    pruned = await lib.prune(now, retain_days=90)
+    assert pruned == 1
+    assert not Path(old_path).exists()                       # 文件已删
+    assert await lib.file_path(sid_old) is None              # 行已删
+    rows = await store.db.execute_fetchall(
+        "SELECT COUNT(*) AS c FROM sticker_contexts WHERE sticker_id=?", (sid_old,))
+    assert rows[0]["c"] == 0                                 # 语境已删
+    assert [r["id"] for r in await lib.list_stickers(10)] == [sid_new]
+
+    # 无过期内容时清理是空操作
+    assert await lib.prune(now, retain_days=90) == 0
+
+
+async def test_pick_prefers_recent_over_old_hot(store, cfg, clock):
+    """软遗忘：选取热度按时间距离衰减——老的高频梗排不进候选，新梗优先。"""
+    cfg.sticker.send_cooldown_seconds = 0
+    lib = _lib_varied(store, cfg)
+    now = clock.now()
+    stale_ids, fresh_ids = [], []
+    for i in range(3):
+        stale = await lib.collect(f"http://x/old{i}.png", "g1", "老王", now - 120 * 86400)
+        await lib.set_tags(stale, ["搞笑"])
+        await store.db.execute("UPDATE stickers SET use_count=10 WHERE id=?", (stale,))
+        fresh = await lib.collect(f"http://x/new{i}.png", "g1", "小明", now)
+        await lib.set_tags(fresh, ["搞笑"])
+        stale_ids.append(stale)
+        fresh_ids.append(fresh)
+    await store.db.commit()
+
+    picks = {(await lib.pick_by_tag("搞笑", "g1"))["id"] for _ in range(15)}
+    assert picks <= set(fresh_ids)   # use_count=10 的 120 天前冷梗全部沉底

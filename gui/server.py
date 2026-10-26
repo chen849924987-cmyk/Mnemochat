@@ -154,6 +154,7 @@ class GUIApp:
         return {"ok": True, "now": new_now,
                 "promoted": c.promoted, "superseded": c.superseded,
                 "semantic": c.semantic_created, "archived": c.archived,
+                "stickers_pruned": pipe.last_stickers_pruned,
                 "promoted_contents": list(c.promoted_contents),
                 "superseded_contents": list(c.superseded_contents),
                 "semantic_contents": list(c.semantic_contents),
@@ -165,6 +166,7 @@ class GUIApp:
         c = await pipe.consolidate_now()
         return {"ok": True, "promoted": c.promoted, "superseded": c.superseded,
                 "semantic": c.semantic_created, "archived": c.archived,
+                "stickers_pruned": pipe.last_stickers_pruned,
                 "promoted_contents": list(c.promoted_contents),
                 "superseded_contents": list(c.superseded_contents),
                 "semantic_contents": list(c.semantic_contents),

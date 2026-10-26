@@ -134,6 +134,8 @@ async def run_sim(cfg: BotConfig, mock: bool = False, config_path: str = "config
                 c = await pipe.consolidate_now()
                 console.print(f"😴 晋升 {c.promoted} · 取代 {c.superseded} "
                               f"· 归纳 {c.semantic_created}（归档 {c.archived}）")
+                if pipe.last_stickers_pruned:
+                    console.print(f"  🧹 忘记表情包 {pipe.last_stickers_pruned} 张")
                 continue
             if line == "/ingest":
                 await pipe.flush_ingest()

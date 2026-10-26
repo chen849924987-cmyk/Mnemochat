@@ -342,8 +342,10 @@
         <div><label class="check"><input type="checkbox" data-key="DRIFT_ENABLED" data-type="bool">人格漂移检测</label></div>
         <div><label class="check"><input type="checkbox" data-key="STICKER_ENABLED" data-type="bool">表情包收集/发送</label></div>
         <div><label>照片体积上限 KB</label><input type="number" data-key="STICKER_MAX_KB" data-type="num"></div>
-        <div><label class="check"><input type="checkbox" id="visionUseChat" data-key="VISION_USE_CHAT" data-type="bool">视觉打标用聊天模型</label></div>
+        <div><label>梗图保留天数（0=永不清理）</label>
+          <input type="number" data-key="STICKER_RETAIN_DAYS" data-type="num"></div>
       </div>
+      <div><label class="check"><input type="checkbox" id="visionUseChat" data-key="VISION_USE_CHAT" data-type="bool">视觉打标用聊天模型</label></div>
       <label>视觉打标 API 密钥<span class="vishint">（勾选"用聊天模型"时忽略，自动用聊天密钥）</span></label>
       <input type="password" data-key="VISION_KEY" class="vision-ext">
       <div class="grid2">
@@ -470,6 +472,8 @@ async function doWarp() {
   (resp.promoted_contents || []).forEach(c => addMsg("evt", "", "⬆ 晋升 LTM：" + c));
   (resp.superseded_contents || []).forEach(c => addMsg("evt", "", "✖ 被取代：" + c));
   (resp.semantic_contents || []).forEach(c => addMsg("evt", "", "✦ 语义归纳：" + c));
+  if (resp.stickers_pruned > 0)
+    addMsg("evt", "", `🧹 忘记了 ${resp.stickers_pruned} 张久未出现的表情包`);
   addEvents(resp.events);
   refreshStatus();
 }
@@ -477,6 +481,8 @@ async function doConsolidate() {
   const resp = await api("/api/consolidate");
   if (!resp.ok) return toast(resp.error || "失败", "err");
   addMsg("evt", "", `😴 巩固：晋升 ${resp.promoted} · 取代 ${resp.superseded} · 归纳 ${resp.semantic}`);
+  if (resp.stickers_pruned > 0)
+    addMsg("evt", "", `🧹 忘记了 ${resp.stickers_pruned} 张久未出现的表情包`);
   if (resp.drift && !resp.drift.skipped) {
     addMsg("evt", "", resp.drift.drifted
       ? `⚠ 人格漂移告警（贴合度 ${resp.drift.adherence}）——已注入校准提醒`

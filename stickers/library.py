@@ -167,20 +167,51 @@ class StickerLibrary:
     # ---------- 发送 ----------
 
     async def pick_by_tag(self, tag: str, group_id: str) -> dict | None:
-        """按分类选图：本群的梗优先，使用次数高的优先，冷却期内不发。"""
+        """按分类选图：本群的梗优先；热度按"使用次数 / 时间距离"衰减——
+        久未出现的冷梗自然沉底（软遗忘），冷却期内不发。"""
         now = time.monotonic()
         if now - self._last_sent.get(group_id, 0.0) < self.cfg.sticker.send_cooldown_seconds:
             return None
         rows = await self.store.db.execute_fetchall(
             "SELECT * FROM stickers WHERE tags LIKE ? "
-            "ORDER BY CASE WHEN group_id=? THEN 0 ELSE 1 END, use_count DESC LIMIT 5",
-            (f'%"{tag}"%', group_id),
+            "ORDER BY CASE WHEN group_id=? THEN 0 ELSE 1 END, "
+            "use_count / (1.0 + MAX(0.0, ? - last_seen) / 86400.0) DESC LIMIT 5",
+            (f'%"{tag}"%', group_id, time.time()),
         )
         if not rows:
             return None
         pick = random.choice(rows[:3])
         self._last_sent[group_id] = now
         return dict(pick)
+
+    # ---------- 遗忘 ----------
+
+    async def prune(self, now: float, retain_days: float) -> int:
+        """硬遗忘：群里 retain_days 天没出现过的梗删除行、语境与图片文件。
+        表情包没有记忆那种溯源价值，这里破例做物理删除；retain_days<=0 由调用方短路。
+        返回清理张数。"""
+        cutoff = now - retain_days * 86400.0
+        rows = await self.store.db.execute_fetchall(
+            "SELECT id, file_path FROM stickers WHERE last_seen < ?", (cutoff,))
+        if not rows:
+            return 0
+        root = self.dir.resolve()
+        removed = 0
+        for r in rows:
+            p = Path(r["file_path"])
+            try:   # 防御：只删图库目录内的文件
+                if p.resolve().parent == root and p.exists():
+                    p.unlink()
+            except OSError:
+                log.warning("表情包文件清理失败：%s", p)
+            await self.store.db.execute(
+                "DELETE FROM sticker_contexts WHERE sticker_id=?", (r["id"],))
+            await self.store.db.execute("DELETE FROM stickers WHERE id=?", (r["id"],))
+            removed += 1
+        await self.store.db.commit()
+        if removed:
+            log.info("表情包遗忘：%d 张（%d 天未出现）", removed, int(retain_days))
+        return removed
 
     # ---------- prompt 注入 ----------
 

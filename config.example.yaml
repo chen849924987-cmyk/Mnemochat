@@ -127,6 +127,7 @@ drift:
 sticker:
   enabled: true
   collect_max_kb: 800          # 超过该大小的图视为照片，不入表情库
+  retain_days: 90              # 遗忘：群里 N 天没出现的梗删除文件+记录（0=永不清理）
   send_cooldown_seconds: 300   # 发图冷却，防刷屏
   tag_batch: 8
   vision:

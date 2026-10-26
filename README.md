@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/chen849924987-cmyk/Mnemochat/actions/workflows/ci.yml/badge.svg)](https://github.com/chen849924987-cmyk/Mnemochat/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-90%20passed-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-92%20passed-brightgreen)]()
 
 **English README → [README.en.md](README.en.md)**
 
@@ -145,6 +145,8 @@ python main.py --edit-persona personas/deepseek_whale.yaml
 
 **发送**：模型看到系统提示里的可用分类清单，想发表情就在回复中嵌入 `[[sticker:分类]]` 标记；适配器先发图、间隔半秒再发文字（与角色卡的 send_sticker 规范一致），带发图冷却防刷屏。模拟器用 `/stickers` 查看图库。
 
+**遗忘**（表情包版）：收集按内容 md5 去重不会重复占空间，此外有两层新陈代谢——发送选取的热度按"使用次数 / 时间距离"衰减，久未出现的冷梗自动沉底（软遗忘）；巩固时清理群里 `sticker.retain_days`（默认 90 天，0=关闭）没出现过的梗，删除文件与记录（硬遗忘——表情包没有记忆那种溯源价值，这里破例删库是合理的）。
+
 ## 人格漂移检测
 
 每次巩固后，抽样机器人近期发言与角色卡比对（评审模型打贴合度分）。判定漂移（客服腔、AI 助手腔、风格突变）时：
@@ -214,13 +216,13 @@ editor/            人格卡修改器（本地网页：滑条调参/卡导入/�
 gui/               图形控制台（聊天模拟器+记忆管理+人格卡+配置生成，本地网页）
 sim/               控制台模拟器、记忆管理台、表格渲染
 personas/          角色卡（default 小满 / dafeiyu 大肥鱼 / deepseek_whale 小鲸鱼）
-tests/             90 个离线测试（衰减/入库/检索/巩固/人格/漂移/兴趣评分/多群/适配器/卡转换/表情包/导出/图形控制台/端到端验收）
+tests/             92 个离线测试（衰减/入库/检索/巩固/人格/漂移/兴趣评分/多群/适配器/卡转换/表情包/导出/图形控制台/端到端验收）
 ```
 
 ## 测试
 
 ```bash
-python -m pytest tests/ -q      # 90 passed，全程离线
+python -m pytest tests/ -q      # 92 passed，全程离线
 ```
 
 验收用例 `tests/test_e2e_acceptance.py::test_remember_allergy_after_two_weeks`：说过过敏 → 快进 14 天 → 清空对话窗口 → 相关话题时以"约两周前"的口吻召回，且召回强化生效。

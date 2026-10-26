@@ -188,6 +188,7 @@ class StickerConfig(BaseModel):
 
     enabled: bool = True
     collect_max_kb: int = 800         # 超过该大小的图视为照片，不入表情库
+    retain_days: float = 90           # 遗忘：群里 N 天没出现的梗删除文件+记录；0=永不清理
     send_cooldown_seconds: float = 300  # 发图冷却，防刷屏
     tag_batch: int = 8                # 每轮巩固打标的表情包数量
     vision: StickerVisionConfig = StickerVisionConfig()

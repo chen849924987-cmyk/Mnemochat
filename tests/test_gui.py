@@ -139,6 +139,7 @@ def test_config_roundtrip_and_preserve_advanced(app, tmp_path):
     posted["INTEREST_THRESHOLD"] = 88
     posted["VISION_USE_CHAT"] = True          # 多模态聊天模型接管看图
     posted["VISION_KEY"] = "sk-vision-1"
+    posted["STICKER_RETAIN_DAYS"] = 30        # 表情包遗忘可选项
     try:
         resp = _post(app.port, "/api/config",
                      {"values": posted, "mode": "mock", "apply": False})
@@ -151,6 +152,7 @@ def test_config_roundtrip_and_preserve_advanced(app, tmp_path):
         assert cfg.llm.api_key == "sk-test-123"       # 经 os.environ 插值回来
         assert cfg.sticker.vision.use_chat is True
         assert cfg.sticker.vision.api_key == "sk-vision-1"
+        assert cfg.sticker.retain_days == 30
         assert read_env(env_path)["DEEPSEEK_API_KEY"] == "sk-test-123"
 
         # 界面未展示的高级项：手改 yaml 后 GUI 保存不丢

@@ -145,6 +145,7 @@ drift:
 sticker:
   enabled: @@STICKER_ENABLED@@
   collect_max_kb: @@STICKER_MAX_KB@@
+  retain_days: @@STICKER_RETAIN_DAYS@@   # 遗忘：群里 N 天没出现的梗删除文件+记录；0=永不清理
   send_cooldown_seconds: @@STICKER_SEND_COOLDOWN@@
   tag_batch: @@STICKER_TAG_BATCH@@
   vision:
@@ -221,6 +222,7 @@ def values_from_config(cfg) -> dict:
         "DRIFT_ENABLED": cfg.drift.enabled,
         "STICKER_ENABLED": cfg.sticker.enabled,
         "STICKER_MAX_KB": cfg.sticker.collect_max_kb,
+        "STICKER_RETAIN_DAYS": cfg.sticker.retain_days,
         "STICKER_SEND_COOLDOWN": cfg.sticker.send_cooldown_seconds,
         "STICKER_TAG_BATCH": cfg.sticker.tag_batch,
         "INGEST_WINDOW_SIZE": cfg.ingest.window_size,
@@ -279,7 +281,7 @@ FORM_KEYS = frozenset({
     "ONEBOT_WS_URL", "ONEBOT_TOKEN",
     "TELEGRAM_TOKEN", "TG_POLL_TIMEOUT", "TG_REPLY_TO_MESSAGE",
     "DRIFT_ENABLED",
-    "STICKER_ENABLED", "STICKER_MAX_KB",
+    "STICKER_ENABLED", "STICKER_MAX_KB", "STICKER_RETAIN_DAYS",
 })
 
 
