@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/chen849924987-cmyk/Mnemochat/actions/workflows/ci.yml/badge.svg)](https://github.com/chen849924987-cmyk/Mnemochat/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-58%20passed-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-89%20passed-brightgreen)]()
 
 **English README → [README.en.md](README.en.md)**
 
@@ -64,11 +64,15 @@
 python -m venv .venv
 .venv/Scripts/pip install -r requirements.txt   # Windows；Linux/macOS 用 .venv/bin/pip
 
-# 离线体验全流程（不调任何 API，规则模拟）
+# 图形控制台（推荐）：聊天模拟器 + 记忆 + 人格 + 配置，一个本地网页全搞定
+python main.py --gui --mock      # --mock 完全离线，不调任何 API
+python main.py --gui             # 接真实 API（未配密钥时自动先离线运行）
+
+# 终端版模拟器
 python main.py --sim --mock
 
 # 接真实 API
-python main.py --init            # 生成 config.yaml 与 .env
+python main.py --init            # 生成 config.yaml 与 .env（也可在 GUI「设置」页直接保存生成）
 # 编辑 .env 填入 DEEPSEEK_API_KEY、SILICONFLOW_API_KEY（或其他 OpenAI 兼容端点）
 python main.py --check           # 启动体检：角色卡/数据库/分词/API 连通性
 python main.py --sim
@@ -86,6 +90,19 @@ python main.py --onebot
 > Windows 用户可以直接双击 `start.bat` 菜单式启动。**从零到真实 QQ 群的完整步骤（含 NapCat 部署、测试剧本、常见问题）见 [docs/qq-test-guide.md](docs/qq-test-guide.md)。**
 
 @机器人 必回；叫名字/小概率插话由 `behavior` 配置决定。所有群消息（包括机器人没回复的）都会进入记忆管线——先听，才记得。
+
+## 图形控制台（--gui）
+
+```bash
+python main.py --gui [--mock] [--port 8765]
+```
+
+本地网页一体化入口，四个标签页（零额外依赖，仅监听 127.0.0.1，自动打开浏览器）：
+
+- **聊天**：群聊模拟器——以任意群友身份发言，机器人按兴趣评分决定接不接话（未回话时显示兴致明细）；⏩ 时间快进、手动巩固、立即入库、清空对话窗口都在页面上点；
+- **记忆**：记忆库浏览（保留率/强度/召回/复现一目了然）、召回预演、统计；
+- **人格**：内置人格卡修改器——滑条调性格参数、改兴趣词、导入酒馆卡、保存即热重载；
+- **设置**：聊天/提取/嵌入模型与密钥、群聊行为（兴趣门槛等）、QQ/Telegram 接入——**保存即生成 config.yaml 与 .env，可一键"应用到运行中机器人"热重建管线，全程不用改代码、不用重启**。界面未展示的高级调参项（ingest/consolidation/recall/decay）保存时从原配置回填，手工调过的不会被覆盖。
 
 接入 Telegram 群：
 
@@ -183,24 +200,25 @@ python main.py --edit-persona personas/deepseek_whale.yaml
 ## 项目结构
 
 ```
-main.py            入口：--sim / --onebot / --telegram / --inspect / --export / --import / --reembed / --init
+main.py            入口：--gui / --sim / --onebot / --telegram / --inspect / --export / --import / --reembed / --init
 config.py          配置加载（yaml + ${ENV} 密钥插值）
 adapter/           平台适配层：QQ OneBot v11（正向 WS）· Telegram（长轮询）
-chat/              llm 客户端、mock 后端、群聊行为策略、回复主管线（多群安全）
+chat/              llm 客户端、mock 后端、群聊行为策略、兴趣度评分、回复主管线（多群安全）
 memory/            schema/store/ingest/consolidate/recall/decay
 embed/             api / local / mock 三通道嵌入
 persona/           角色卡、人格守卫（知识边界/注入格式）、漂移检测、酒馆卡转换
 stickers/          表情包图库（旁观收集/语境+视觉打标/按分类发图）
 editor/            人格卡修改器（本地网页：滑条调参/卡导入/预览/热重载）
+gui/               图形控制台（聊天模拟器+记忆管理+人格卡+配置生成，本地网页）
 sim/               控制台模拟器、记忆管理台、表格渲染
 personas/          角色卡（default 小满 / dafeiyu 大肥鱼 / deepseek_whale 小鲸鱼）
-tests/             82 个离线测试（衰减/入库/检索/巩固/人格/漂移/兴趣评分/多群/适配器/卡转换/表情包/导出/端到端验收）
+tests/             89 个离线测试（衰减/入库/检索/巩固/人格/漂移/兴趣评分/多群/适配器/卡转换/表情包/导出/图形控制台/端到端验收）
 ```
 
 ## 测试
 
 ```bash
-python -m pytest tests/ -q      # 82 passed，全程离线
+python -m pytest tests/ -q      # 89 passed，全程离线
 ```
 
 验收用例 `tests/test_e2e_acceptance.py::test_remember_allergy_after_two_weeks`：说过过敏 → 快进 14 天 → 清空对话窗口 → 相关话题时以"约两周前"的口吻召回，且召回强化生效。
@@ -212,6 +230,7 @@ python -m pytest tests/ -q      # 82 passed，全程离线
 - [x] 人格漂移检测（巩固时抽样评审 + 角色校准提醒闭环）
 - [x] 记忆导出/导入（备份迁移，`--export` / `--import`）
 - [x] 人格卡修改器（网页滑条调参 + SillyTavern 卡导入 + 热重载）
+- [x] 图形控制台（--gui：聊天模拟器 + 记忆管理 + 人格卡 + 配置生成，一体化本地网页）
 - [x] 表情包：旁观收集 → 语境/视觉打标 → `[[sticker:分类]]` 发图
 - [ ] `visibility: self` 的机器人自我反思记忆
 - [ ] Discord 适配器、多角色多群管理台、记忆可视化面板

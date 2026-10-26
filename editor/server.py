@@ -28,18 +28,18 @@ from persona.convert import extract_card_from_png, st_card_to_persona
 _PAGE = Path(__file__).resolve().parent / "page.html"
 
 
-class _State:
+class EditorState:
     def __init__(self, card_path: Path) -> None:
         self.card_path = card_path
         self.backed_up = False
 
 
-def _load_persona(path: Path) -> dict:
+def load_persona(path: Path) -> dict:
     with open(path, encoding="utf-8") as f:
         return yaml.safe_load(f) or {}
 
 
-def _save_persona(state: _State, data: dict) -> None:
+def save_persona(state: EditorState, data: dict) -> None:
     if not state.backed_up and state.card_path.exists():
         bak = state.card_path.with_suffix(state.card_path.suffix + ".bak")
         bak.write_bytes(state.card_path.read_bytes())
@@ -51,7 +51,7 @@ def _save_persona(state: _State, data: dict) -> None:
     tmp.replace(state.card_path)
 
 
-def make_handler(state: _State) -> type[BaseHTTPRequestHandler]:
+def make_handler(state: EditorState) -> type[BaseHTTPRequestHandler]:
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *args) -> None:  # 静默访问日志
             pass
@@ -75,7 +75,7 @@ def make_handler(state: _State) -> type[BaseHTTPRequestHandler]:
             elif self.path == "/api/persona":
                 try:
                     self._json({"ok": True, "path": str(state.card_path),
-                                "persona": _load_persona(state.card_path)})
+                                "persona": load_persona(state.card_path)})
                 except FileNotFoundError:
                     self._json({"ok": False,
                                 "error": f"角色卡不存在：{state.card_path}"}, 404)
@@ -93,7 +93,7 @@ def make_handler(state: _State) -> type[BaseHTTPRequestHandler]:
             if self.path == "/api/persona":
                 try:
                     PersonaCard.model_validate(payload)   # 保存前校验
-                    _save_persona(state, payload)
+                    save_persona(state, payload)
                     self._json({"ok": True})
                 except Exception as e:
                     self._json({"ok": False, "error": f"校验/保存失败：{e}"}, 400)
@@ -126,7 +126,7 @@ def make_handler(state: _State) -> type[BaseHTTPRequestHandler]:
 
 
 def run_editor(card_path: Path, port: int = 8765) -> None:
-    state = _State(card_path)
+    state = EditorState(card_path)
     server = ThreadingHTTPServer(("127.0.0.1", port), make_handler(state))
     url = f"http://127.0.0.1:{port}"
     print(f"人格卡修改器已启动：{url}")

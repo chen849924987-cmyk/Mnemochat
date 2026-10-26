@@ -1,5 +1,6 @@
 """入口。
 
+  python main.py --gui [--mock]  图形控制台：聊天模拟器+记忆+人格+配置（本地网页）
   python main.py --init          生成 config.yaml / .env 模板
   python main.py --sim [--mock]  控制台群聊模拟器（--mock 完全离线）
   python main.py --onebot        QQ 群聊模式（OneBot v11 / NapCat 等）
@@ -26,6 +27,8 @@ ROOT = Path(__file__).resolve().parent
 def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="bot", description="群聊长期记忆机器人")
     p.add_argument("--config", default="config.yaml", help="配置文件路径")
+    p.add_argument("--gui", action="store_true",
+                   help="图形控制台：聊天模拟器/记忆管理/人格卡/配置生成，本地网页")
     p.add_argument("--sim", action="store_true", help="控制台群聊模拟器（默认动作）")
     p.add_argument("--mock", action="store_true", help="离线模式：不调用任何外部 API")
     p.add_argument("--onebot", action="store_true",
@@ -121,6 +124,25 @@ def main() -> None:
         from editor.server import run_editor
 
         run_editor(card_path, args.port)
+        return
+    if args.gui:
+        from config import load_config
+
+        cfg_path = ROOT / args.config if args.config == "config.yaml" else Path(args.config)
+        if cfg_path.exists():
+            cfg = load_config(cfg_path)
+        else:
+            print("[提示] 尚未生成 config.yaml——先用示例配置启动，"
+                  "到「设置」页保存即可生成。")
+            cfg = load_config(ROOT / "config.example.yaml")
+        mock = args.mock
+        if not mock and not cfg.llm.api_key:
+            print("[提示] 未配置 API 密钥——先以离线模式运行；"
+                  "在「设置」页填好密钥后点「保存并应用到运行中机器人」。")
+            mock = True
+        from gui.server import run_gui
+
+        run_gui(ROOT, cfg, mock=mock, config_path=args.config, port=args.port)
         return
     cfg = _load(args)
 
