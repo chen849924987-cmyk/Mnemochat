@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/chen849924987-cmyk/Mnemochat/actions/workflows/ci.yml/badge.svg)](https://github.com/chen849924987-cmyk/Mnemochat/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-96%20passed-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-97%20passed-brightgreen)]()
 
 **English README → [README.en.md](README.en.md)**
 
@@ -165,8 +165,10 @@ social:
 - 发言**两边都记住**：客库记自己的经历，主库把它当"来自客人的消息"走完整回复管线；
 - 关系不是写死的——串门几次后双方各自记得对方，之后自然互相提起；
 - GUI「设置 · 社交与串门」可视化维护关系列表，「聊天」页 👋 按钮随时手动触发；
-- 身份边界：模拟器/GUI 的群是虚拟的，客人以自己的名字出现；QQ 模式单账号无法分身，
-  跨号串门请用双开双卡同群方案（两个实例各自带卡与库）。
+- 两种出场方式：模拟器/GUI（虚拟群）客人以自己的名字出现；**QQ 顶号模式**——
+  客人发言与主卡接话经**同一个账号**发出（`--onebot` 下自动生效），
+  默认加【名字】前缀防身份混淆（`social.prefix_guest_name` 可关）；
+- 想要两个号码真实同群互聊，用双开双卡方案（两个实例各自带卡与库拉进同一群）。
 
 ## 人格漂移检测
 
@@ -238,13 +240,13 @@ editor/            人格卡修改器（本地网页：滑条调参/卡导入/�
 gui/               图形控制台（聊天模拟器+记忆管理+人格卡+配置生成，本地网页）
 sim/               控制台模拟器、记忆管理台、表格渲染
 personas/          角色卡（default 小满 / dafeiyu 大肥鱼 / deepseek_whale 小鲸鱼）
-tests/             96 个离线测试（衰减/入库/检索/巩固/人格/漂移/兴趣评分/多群/适配器/卡转换/表情包/导出/图形控制台/端到端验收）
+tests/             97 个离线测试（衰减/入库/检索/巩固/人格/漂移/兴趣评分/多群/适配器/卡转换/表情包/导出/图形控制台/端到端验收）
 ```
 
 ## 测试
 
 ```bash
-python -m pytest tests/ -q      # 96 passed，全程离线
+python -m pytest tests/ -q      # 97 passed，全程离线
 ```
 
 验收用例 `tests/test_e2e_acceptance.py::test_remember_allergy_after_two_weeks`：说过过敏 → 快进 14 天 → 清空对话窗口 → 相关话题时以"约两周前"的口吻召回，且召回强化生效。

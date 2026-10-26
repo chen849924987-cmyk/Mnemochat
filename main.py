@@ -297,7 +297,7 @@ async def _build_pipeline(cfg, mock: bool):
     vision = create_vision(cfg, mock) if sticker_lib else None
     pipeline = BotPipeline(store, chat, embedder, persona, cfg, clock,
                            persona_file=cfg.persona_file,
-                           sticker_lib=sticker_lib, vision=vision)
+                           sticker_lib=sticker_lib, vision=vision, mock=mock)
     pipeline.sticker_store = sticker_store   # 供 close_stores 关闭（独立库时非空）
     return pipeline, store
 

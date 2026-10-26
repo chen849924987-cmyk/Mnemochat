@@ -303,3 +303,31 @@ def test_social_visits_config_roundtrip(app, tmp_path):
     assert v.persona_file == "personas/dafeiyu.yaml"
     assert v.database == "data/memory_dafeiyu.db"
     assert v.every_hours == 6
+
+
+def test_visit_qq_top_account_sender(app, tmp_path):
+    """QQ 顶号模式：适配器注入 social_sender 后，客人发言（带【名字】前缀）
+    与主卡接话都经同一账号的发送器发出。"""
+    from config import SocialVisit
+
+    sent: list[tuple[str, str]] = []
+
+    async def sender(gid: str, text: str) -> None:
+        sent.append((gid, text))
+
+    app.pipeline.social_sender = sender
+    app.cfg.social.visits = [SocialVisit(
+        persona_file="personas/dafeiyu.yaml",
+        database=str(tmp_path / "guest2.db"))]
+    try:
+        r = _post(app.port, "/api/visit", {})
+        assert r["ok"], r
+        assert r["reply"]                              # 主卡接话已生成
+        assert sent, "顶号模式下应经发送器发出"
+        assert all(gid == app.cfg.sim_group_id for gid, _ in sent)
+        assert any(t.startswith("【大肥鱼】") for _, t in sent)   # 客人发言带前缀
+        assert any(t == r["reply"] for _, t in sent)             # 主卡接话原文发出
+        # 群名不匹配时
+        assert not any("data/evil" in t for _, t in sent)
+    finally:
+        app.pipeline.social_sender = None

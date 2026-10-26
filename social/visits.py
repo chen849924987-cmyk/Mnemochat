@@ -1,16 +1,20 @@
-"""串门：客卡到主卡所在的模拟群露面，两边都记住这次会面。
+"""串门：客卡到主卡所在的群露面，两边都记住这次会面。
 
 - 客人用自己的角色卡 + 记忆库（social.visits[i].database，留空=与主卡同库），
   读主卡群里的最近对话窗口，以自己的人格和自己记得的事生成一条自然的串门发言；
 - 发言写入两边库：客库（自己的经历，入 ingest 缓冲）+
   主库（作为"来自客人的消息"走完整 on_user_message 管线）；
 - host_replies=True 时主卡会正常接话——关系不是写死的，是聊出来的；
-- 身份边界：模拟器/GUI 的群是虚拟的，客人以自己的名字出现，效果最佳；
-  QQ 模式下单个账号无法分身，跨号串门请用"双开双卡同群"方案（各跑一个实例）。
+- 两种出场方式：
+  - 模拟器/GUI（虚拟群）：客人以自己的名字出现在聊天记录里；
+  - QQ 顶号模式（适配器注入 social_sender）：客人发言经**同一个账号**发出
+    （类似顶号），默认加【名字】前缀防身份混淆，主卡的接话同样经账号发出。
 """
 
 from __future__ import annotations
 
+import asyncio
+import logging
 from typing import TYPE_CHECKING
 
 from memory.ingest import format_window
@@ -22,6 +26,8 @@ if TYPE_CHECKING:
     from config import BotConfig, SocialVisit
     from memory.store import MemoryStore
     from util.clock import Clock
+
+log = logging.getLogger(__name__)
 
 VISIT_HINT = ("【串门场景】你现在临时到另一个群串门，像老朋友顺路来打招呼："
               "简短（一两句话）、自然，可以寒暄、接话茬、分享你那边的事；"
@@ -70,6 +76,14 @@ async def perform_visit(host_pipe: "BotPipeline", host_store: "MemoryStore",
             group, guest.name, guest.name, text,
             force_reply=cfg.social.host_replies)
 
+        # QQ 顶号模式：适配器注入了群发送器 → 客人发言与主卡接话都经同一账号发出
+        sender = getattr(host_pipe, "social_sender", None)
+        if sender is not None:
+            out = f"【{guest.name}】{text}" if cfg.social.prefix_guest_name else text
+            await sender(group, out)
+            if reply:
+                await sender(group, reply)
+
         return {"guest": guest.name, "text": text, "reply": reply,
                 "guest_db": guest_cfg.database,
                 "host": host_pipe.persona.name}
@@ -92,3 +106,24 @@ def due_visits(cfg, clock, last_visit: dict[int, float]) -> list[int]:
         if last is None or now - last >= v.every_hours * 3600:
             due.append(i)
     return due
+
+
+async def run_visit_scheduler(pipe: "BotPipeline", store: "MemoryStore",
+                              cfg: "BotConfig", clock: "Clock",
+                              last_visit: dict[int, float],
+                              mock: bool = False) -> None:
+    """串门自动调度：每分钟检查到期关系并执行（GUI 与 OneBot 适配器共用）。"""
+    while True:
+        await asyncio.sleep(60)
+        try:
+            due = due_visits(cfg, clock, last_visit)
+        except Exception:
+            continue
+        for i in due:
+            last_visit[i] = clock.now()
+            try:
+                res = await perform_visit(pipe, store, cfg, clock,
+                                          cfg.social.visits[i], mock=mock)
+                log.info("自动串门：%s 来到了 %s 的群", res["guest"], res["host"])
+            except Exception:
+                log.exception("自动串门失败（关系 #%s）", i)

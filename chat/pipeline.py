@@ -43,7 +43,8 @@ class BotPipeline:
                  cfg: "BotConfig", clock: "Clock",
                  persona_file: str | Path | None = None,
                  sticker_lib: "StickerLibrary | None" = None,
-                 vision: "VisionDescriber | None" = None) -> None:
+                 vision: "VisionDescriber | None" = None,
+                 mock: bool = False) -> None:
         self.store = store
         self.chat = chat
         self.embedder = embedder
@@ -81,6 +82,9 @@ class BotPipeline:
         # 独立表情包共享库（per_persona_memory / sticker.database 分库时非空，由入口设置）
         self.sticker_store = None
         self._sticker_tagger = None
+        # 串门：适配器可注入群发送器（QQ 顶号模式：客人发言经同一账号发出）
+        self.mock = mock
+        self.social_sender = None
         if sticker_lib is not None:
             from stickers.tagger import StickerTagger
 

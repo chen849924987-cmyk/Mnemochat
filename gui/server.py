@@ -85,25 +85,12 @@ class GUIApp:
             self._visit_loop(), self.bridge.loop)
 
     async def _visit_loop(self) -> None:
-        """串门自动调度：每分钟检查一次到期关系（间隔与关系在「设置」页配置）。"""
-        from social.visits import due_visits, perform_visit
+        """串门自动调度：共享引擎（GUI 虚拟群无发送器，客人以名字出场）。"""
+        from social.visits import run_visit_scheduler
 
-        while True:
-            await asyncio.sleep(60)
-            try:
-                due = due_visits(self.cfg, self.pipeline.clock, self._last_visit)
-            except Exception:
-                continue
-            for i in due:
-                self._last_visit[i] = self.pipeline.clock.now()
-                try:
-                    res = await perform_visit(self.pipeline, self.store, self.cfg,
-                                              self.pipeline.clock,
-                                              self.cfg.social.visits[i],
-                                              mock=self.mock)
-                    log.info("自动串门：%s 来到了 %s", res["guest"], res["host"])
-                except Exception:
-                    log.exception("自动串门失败（关系 #%s）", i)
+        await run_visit_scheduler(self.pipeline, self.store, self.cfg,
+                                  self.pipeline.clock, self._last_visit,
+                                  mock=self.mock)
 
     def _resolve(self, p: str | Path) -> Path:
         path = Path(p)

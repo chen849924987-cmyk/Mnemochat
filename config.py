@@ -215,7 +215,8 @@ class SocialConfig(BaseModel):
 
     enabled: bool = True
     visits: list[SocialVisit] = Field(default_factory=list)
-    host_replies: bool = True   # 客人发言后，主卡是否接话（产生真实互动）
+    host_replies: bool = True      # 客人发言后，主卡是否接话（产生真实互动）
+    prefix_guest_name: bool = True  # QQ 顶号模式：客人发言前缀【名字】，防身份混淆
 
 
 class BotConfig(BaseModel):

@@ -156,8 +156,23 @@ class OneBotV11Adapter(GroupChatAdapter):
     def __init__(self, pipeline: "BotPipeline", cfg: "BotConfig", clock: "Clock") -> None:
         super().__init__(pipeline, cfg, clock)
         self.self_qq: str | None = None
+        self._ws = None
+        self._last_visit: dict[int, float] = {}   # 串门关系下标 -> 上次串门时刻
         ocfg = cfg.onebot
         self._sem = asyncio.Semaphore(max(1, ocfg.max_concurrent_replies))
+        # 串门顶号模式：客人发言与主卡接话经同一账号的这条连接发出
+        self.pipeline.social_sender = self.send_group_text
+
+    async def send_group_text(self, group_id: str, text: str) -> None:
+        """主动向群发纯文本（串门顶号：客卡/主卡发言都走这里）。"""
+        if self._ws is None:
+            log.warning("WS 未连接，串门发言无法发送：%s", text[:40])
+            return
+        await self._ws.send(json.dumps({
+            "action": "send_group_msg",
+            "params": {"group_id": int(group_id),
+                       "message": [{"type": "text", "data": {"text": text}}]},
+        }, ensure_ascii=False))
 
     async def run(self) -> None:
         import websockets
@@ -182,7 +197,13 @@ class OneBotV11Adapter(GroupChatAdapter):
     async def _serve(self, ws) -> None:
         # 询问自身身份（响应在消息流里以 echo=login 回来）
         await ws.send(json.dumps({"action": "get_login_info", "echo": "login"}))
+        self._ws = ws
+        from social.visits import run_visit_scheduler
+
         loop_task = asyncio.create_task(self._consolidation_loop())
+        visit_task = asyncio.create_task(run_visit_scheduler(
+            self.pipeline, self.pipeline.store, self.cfg, self.clock,
+            self._last_visit, mock=self.pipeline.mock))
         try:
             async for raw in ws:
                 try:
@@ -197,6 +218,8 @@ class OneBotV11Adapter(GroupChatAdapter):
                     continue
                 gm = parse_group_message(data, self.self_qq)
                 if gm is not None:
+                    if self.self_qq and gm.user_id == self.self_qq:
+                        continue   # 自己发出的消息（串门顶号等）不再回流处理
                     if self.sticker_lib is not None:
                         # 旁观收图：表情包下载去重入库（不阻塞消息处理）
                         now = self.clock.now()
@@ -207,7 +230,9 @@ class OneBotV11Adapter(GroupChatAdapter):
                         continue
                     asyncio.create_task(self._handle(ws, gm))
         finally:
+            self._ws = None
             loop_task.cancel()
+            visit_task.cancel()
 
     async def _handle(self, ws, gm: GroupMessage) -> None:
         from stickers.library import extract_sticker_markers

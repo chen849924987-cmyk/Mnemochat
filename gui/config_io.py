@@ -151,6 +151,7 @@ drift:
 social:
   enabled: @@SOCIAL_ENABLED@@
   host_replies: @@SOCIAL_HOST_REPLIES@@
+  prefix_guest_name: @@SOCIAL_PREFIX_GUEST_NAME@@   # QQ 顶号模式：客人发言前缀【名字】
   visits: @@SOCIAL_VISITS@@
 
 # ---------- 表情包（旁观收集 → 学习分类 → 聊天时按分类发图） ----------
@@ -248,6 +249,7 @@ def values_from_config(cfg) -> dict:
         "DRIFT_ENABLED": cfg.drift.enabled,
         "SOCIAL_ENABLED": cfg.social.enabled,
         "SOCIAL_HOST_REPLIES": cfg.social.host_replies,
+        "SOCIAL_PREFIX_GUEST_NAME": cfg.social.prefix_guest_name,
         "SOCIAL_VISITS": [v.model_dump() for v in cfg.social.visits],
         "STICKER_ENABLED": cfg.sticker.enabled,
         "STICKER_DATABASE": cfg.sticker.database,
@@ -311,7 +313,8 @@ FORM_KEYS = frozenset({
     "ONEBOT_WS_URL", "ONEBOT_TOKEN",
     "TELEGRAM_TOKEN", "TG_POLL_TIMEOUT", "TG_REPLY_TO_MESSAGE",
     "DRIFT_ENABLED",
-    "SOCIAL_ENABLED", "SOCIAL_HOST_REPLIES", "SOCIAL_VISITS",
+    "SOCIAL_ENABLED", "SOCIAL_HOST_REPLIES", "SOCIAL_PREFIX_GUEST_NAME",
+    "SOCIAL_VISITS",
     "STICKER_ENABLED", "STICKER_MAX_KB", "STICKER_RETAIN_DAYS",
     "PER_PERSONA_MEMORY", "STICKER_DATABASE",
 })
