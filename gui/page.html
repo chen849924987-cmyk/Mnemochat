@@ -245,11 +245,13 @@
     </div>
 
     <fieldset><legend>基础</legend>
+      <label class="check"><input type="checkbox" id="ppMemory" data-key="PER_PERSONA_MEMORY" data-type="bool">
+        每张角色卡独立记忆库（记忆互不相通；表情包库自动共享为 data/stickers_shared.db）</label>
       <div class="grid2">
         <div><label>角色卡（机器人用哪张卡聊天）</label>
           <input type="text" data-key="PERSONA_FILE" list="personaList">
           <datalist id="personaList"></datalist></div>
-        <div class="row"><div><label>数据库文件</label>
+        <div class="row"><div><label id="dbLabel">数据库文件<span class="vishint">（开启隔离后自动 data/memory_&lt;卡名&gt;.db）</span></label>
             <input type="text" data-key="DATABASE"></div>
           <div><label>模拟器群 ID</label>
             <input type="text" data-key="SIM_GROUP_ID"></div></div>
@@ -344,6 +346,8 @@
         <div><label>照片体积上限 KB</label><input type="number" data-key="STICKER_MAX_KB" data-type="num"></div>
         <div><label>梗图保留天数（0=永不清理）</label>
           <input type="number" data-key="STICKER_RETAIN_DAYS" data-type="num"></div>
+        <div><label>表情包库路径<span class="vishint">（留空=随记忆库）</span></label>
+          <input type="text" data-key="STICKER_DATABASE" placeholder="data/stickers_shared.db"></div>
       </div>
       <div><label class="check"><input type="checkbox" id="visionUseChat" data-key="VISION_USE_CHAT" data-type="bool">视觉打标用聊天模型</label></div>
       <label>视觉打标 API 密钥<span class="vishint">（勾选"用聊天模型"时忽略，自动用聊天密钥）</span></label>
@@ -413,6 +417,7 @@ async function refreshStatus() {
     <div class="kv"><span>消息</span><span>${s.messages}</span></div>
     <div class="kv"><span>staging / LTM</span><span>${s.staging} / ${s.ltm}</span></div>
     <div class="kv"><span>数据库</span><span>${s.database}</span></div>
+    <div class="kv"><span>表情包库</span><span>${s.sticker_database || "（同库）"}</span></div>
     <div class="kv"><span>config.yaml</span><span>${s.config_saved ? "已生成" : "未生成（设置页保存）"}</span></div>
     <div class="kv"><span>聊天密钥</span><span>${s.chat_key_set ? "已配置" : "未配置"}</span></div>`;
   return s;
@@ -583,6 +588,7 @@ async function loadConfig() {
       el.nextElementSibling.value = el.value;
   });
   syncVisionFields();
+  syncIsolationFields();
 }
 function syncVisionFields() {
   const box = document.getElementById("visionUseChat");
@@ -590,6 +596,13 @@ function syncVisionFields() {
   document.querySelectorAll(".vision-ext").forEach(el => el.disabled = box.checked);
 }
 document.getElementById("visionUseChat").addEventListener("change", syncVisionFields);
+function syncIsolationFields() {
+  const box = document.getElementById("ppMemory");
+  if (!box) return;
+  document.querySelector('[data-key="DATABASE"]').disabled = box.checked;
+  document.querySelector('[data-key="STICKER_DATABASE"]').disabled = box.checked;
+}
+document.getElementById("ppMemory").addEventListener("change", syncIsolationFields);
 function collectForm() {
   const out = {...VALUES};
   document.querySelectorAll("[data-key]").forEach(el => {

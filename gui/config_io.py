@@ -30,8 +30,12 @@ _YAML_TEMPLATE = """\
 # 角色卡文件（personas/ 目录下）
 persona_file: @@PERSONA_FILE@@
 
-# SQLite 数据库路径
+# SQLite 数据库路径（记忆/消息库存放处）
 database: @@DATABASE@@
+
+# 每张角色卡独立记忆库：开启后 database 自动变为 data/memory_<卡名>.db，
+# 表情包库仍共享（sticker.database 留空时自动 data/stickers_shared.db）
+per_persona_memory: @@PER_PERSONA_MEMORY@@
 
 # ---------- 聊天模型（回复用） ----------
 llm:
@@ -144,6 +148,7 @@ drift:
 # ---------- 表情包（旁观收集 → 学习分类 → 聊天时按分类发图） ----------
 sticker:
   enabled: @@STICKER_ENABLED@@
+  database: @@STICKER_DATABASE@@   # 共享表情包库；留空=随记忆库（开启记忆隔离时自动共享库）
   collect_max_kb: @@STICKER_MAX_KB@@
   retain_days: @@STICKER_RETAIN_DAYS@@   # 遗忘：群里 N 天没出现的梗删除文件+记录；0=永不清理
   send_cooldown_seconds: @@STICKER_SEND_COOLDOWN@@
@@ -177,6 +182,7 @@ def values_from_config(cfg) -> dict:
     return {
         "PERSONA_FILE": cfg.persona_file,
         "DATABASE": cfg.database,
+        "PER_PERSONA_MEMORY": cfg.per_persona_memory,
         "SIM_GROUP_ID": cfg.sim_group_id,
         "CHAT_KEY": cfg.llm.api_key,
         "CHAT_BASE_URL": cfg.llm.base_url,
@@ -221,6 +227,7 @@ def values_from_config(cfg) -> dict:
         "TG_REPLY_TO_MESSAGE": cfg.telegram.reply_to_message,
         "DRIFT_ENABLED": cfg.drift.enabled,
         "STICKER_ENABLED": cfg.sticker.enabled,
+        "STICKER_DATABASE": cfg.sticker.database,
         "STICKER_MAX_KB": cfg.sticker.collect_max_kb,
         "STICKER_RETAIN_DAYS": cfg.sticker.retain_days,
         "STICKER_SEND_COOLDOWN": cfg.sticker.send_cooldown_seconds,
@@ -281,8 +288,9 @@ FORM_KEYS = frozenset({
     "ONEBOT_WS_URL", "ONEBOT_TOKEN",
     "TELEGRAM_TOKEN", "TG_POLL_TIMEOUT", "TG_REPLY_TO_MESSAGE",
     "DRIFT_ENABLED",
-    "STICKER_ENABLED", "STICKER_MAX_KB", "STICKER_RETAIN_DAYS",
-})
+        "STICKER_ENABLED", "STICKER_MAX_KB", "STICKER_RETAIN_DAYS",
+        "PER_PERSONA_MEMORY", "STICKER_DATABASE",
+    })
 
 
 def merge_config_values(cfg, posted: dict) -> dict:

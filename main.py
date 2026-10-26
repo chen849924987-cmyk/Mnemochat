@@ -252,29 +252,53 @@ async def _cmd_check(cfg, mock: bool) -> int:
     return failures
 
 
+async def _open_stores(cfg) -> tuple["MemoryStore", "MemoryStore | None"]:
+    """打开主记忆库 + 可选的独立表情包共享库。
+    sticker.database 留空或与主库相同 → 表情包随主库（返回 sticker_store=None）。"""
+    from memory.store import MemoryStore
+
+    same = (not cfg.sticker.database
+            or Path(cfg.sticker.database) == Path(cfg.database))
+    store = MemoryStore(cfg.database)
+    await store.init(with_stickers=same)
+    sticker_store = None
+    if not same:
+        sticker_store = MemoryStore(cfg.sticker.database)
+        await sticker_store.init(with_stickers=True)
+    return store, sticker_store
+
+
+async def close_stores(pipeline, store) -> None:
+    """关闭主库与（若存在的）独立表情包库——所有入口的统一退出路径。"""
+    await store.close()
+    sticker_store = getattr(pipeline, "sticker_store", None)
+    if sticker_store is not None and sticker_store is not store:
+        await sticker_store.close()
+
+
 async def _build_pipeline(cfg, mock: bool):
     from chat.llm import LLMChatClient
     from chat.mock import MockChatClient
     from chat.pipeline import BotPipeline
     from embed.base import create_embedder
     from embed.mock import HashEmbedder
-    from memory.store import MemoryStore
     from persona.card import PersonaCard
     from stickers.library import StickerLibrary
     from stickers.tagger import create_vision
     from util.clock import Clock
 
     clock = Clock()
-    store = MemoryStore(cfg.database)
-    await store.init()
+    store, sticker_store = await _open_stores(cfg)
     chat = MockChatClient() if mock else LLMChatClient(cfg)
     embedder = HashEmbedder() if mock else create_embedder(cfg)
     persona = PersonaCard.load_yaml(cfg.persona_file)
-    sticker_lib = StickerLibrary(store, cfg) if cfg.sticker.enabled else None
+    sticker_lib = (StickerLibrary(sticker_store or store, cfg)
+                   if cfg.sticker.enabled else None)
     vision = create_vision(cfg, mock) if sticker_lib else None
     pipeline = BotPipeline(store, chat, embedder, persona, cfg, clock,
                            persona_file=cfg.persona_file,
                            sticker_lib=sticker_lib, vision=vision)
+    pipeline.sticker_store = sticker_store   # 供 close_stores 关闭（独立库时非空）
     return pipeline, store
 
 
@@ -305,7 +329,7 @@ async def _run_adapter(cfg, mock: bool, kind: str) -> None:
         pass
     finally:
         await pipeline.flush_ingest()
-        await store.close()
+        await close_stores(pipeline, store)
         print("已退出，记忆已保存。")
 
 

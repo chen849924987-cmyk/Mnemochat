@@ -164,3 +164,28 @@ async def test_pick_prefers_recent_over_old_hot(store, cfg, clock):
 
     picks = {(await lib.pick_by_tag("搞笑", "g1"))["id"] for _ in range(15)}
     assert picks <= set(fresh_ids)   # use_count=10 的 120 天前冷梗全部沉底
+
+
+async def test_sticker_store_can_be_shared(tmp_path, cfg):
+    """记忆隔离部署：主库不建表情包表，表情包集中在独立共享库。"""
+    from memory.store import MemoryStore
+
+    core = MemoryStore(tmp_path / "core.db")
+    await core.init(with_stickers=False)
+    shared = MemoryStore(tmp_path / "shared.db")
+    await shared.init(with_stickers=True)
+
+    async def fake_download(url: str) -> bytes | None:
+        return PNG
+    lib = StickerLibrary(shared, cfg, downloader=fake_download)
+    sid = await lib.collect("http://x/1.png", "g1", "小明", 1_000.0)
+    assert sid is not None
+
+    core_tables = {r["name"] for r in await core.db.execute_fetchall(
+        "SELECT name FROM sqlite_master WHERE type='table'")}
+    shared_tables = {r["name"] for r in await shared.db.execute_fetchall(
+        "SELECT name FROM sqlite_master WHERE type='table'")}
+    assert "stickers" not in core_tables and "messages" in core_tables
+    assert "stickers" in shared_tables
+    await core.close()
+    await shared.close()

@@ -187,6 +187,7 @@ class StickerConfig(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     enabled: bool = True
+    database: str = ""                # 共享表情包库路径；留空=随记忆库
     collect_max_kb: int = 800         # 超过该大小的图视为照片，不入表情库
     retain_days: float = 90           # 遗忘：群里 N 天没出现的梗删除文件+记录；0=永不清理
     send_cooldown_seconds: float = 300  # 发图冷却，防刷屏
@@ -199,6 +200,10 @@ class BotConfig(BaseModel):
 
     persona_file: str = "personas/default.yaml"
     database: str = "data/memory.db"
+    # 每张角色卡独立记忆库：开启后 database 自动变为 data/memory_<卡名>.db，
+    # 表情包库仍共享（sticker.database 留空时自动 data/stickers_shared.db）——
+    # "人格是它自己长的，记忆是它自己过的日子，梗是大家共有的"
+    per_persona_memory: bool = False
     llm: LLMConfig = LLMConfig()
     extractor: ExtractorConfig = ExtractorConfig()
     embedding: EmbeddingConfig = EmbeddingConfig()
@@ -240,4 +245,17 @@ def load_config(path: str | Path = "config.yaml", root: Path | None = None) -> B
         )
     with open(cfg_path, encoding="utf-8") as f:
         raw = yaml.safe_load(f) or {}
-    return BotConfig.model_validate(_interpolate_env(raw))
+    return _apply_per_persona_memory(BotConfig.model_validate(_interpolate_env(raw)))
+
+
+def _apply_per_persona_memory(cfg: BotConfig) -> BotConfig:
+    """记忆隔离派生：per_persona_memory 开启时，每个角色卡自动使用
+    data/memory_<卡名>.db，表情包集中到共享库（未显式配置时 data/stickers_shared.db）。"""
+    if not cfg.per_persona_memory:
+        return cfg
+    db = Path(cfg.database)
+    stem = Path(cfg.persona_file).stem
+    cfg.database = str(db.parent / f"memory_{stem}.db")
+    if not cfg.sticker.database:
+        cfg.sticker.database = str(db.parent / "stickers_shared.db")
+    return cfg

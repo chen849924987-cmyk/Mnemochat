@@ -22,6 +22,7 @@ from util.text import seg
 from .models import MemoryRecord, MessageRecord, _loads_or_default, memory_from_row, message_from_row
 
 _SCHEMA = Path(__file__).resolve().parent / "schema.sql"
+_STICKER_SCHEMA = Path(__file__).resolve().parent / "schema_stickers.sql"
 
 
 class MemoryStore:
@@ -34,12 +35,16 @@ class MemoryStore:
 
     # ---------- 生命周期 ----------
 
-    async def init(self) -> None:
+    async def init(self, with_stickers: bool = True) -> None:
+        """建表。with_stickers=False 时不建表情包表——用于"每卡独立记忆库 +
+        共享表情包库"的部署：各卡记忆库互相独立，表情包集中在共享库。"""
         Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
         self._db = await aiosqlite.connect(self.db_path)
         self._db.row_factory = aiosqlite.Row
         await self._db.execute("PRAGMA foreign_keys = ON")
         await self._db.executescript(_SCHEMA.read_text(encoding="utf-8"))
+        if with_stickers:
+            await self._db.executescript(_STICKER_SCHEMA.read_text(encoding="utf-8"))
         await self._db.commit()
 
     async def close(self) -> None:

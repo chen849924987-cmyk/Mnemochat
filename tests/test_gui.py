@@ -189,6 +189,29 @@ def test_apply_rebuilds_pipeline(app):
     assert r["ok"] and r["reply"] and r["persona"] == "大肥鱼"
 
 
+def test_per_persona_memory_derivation(app, tmp_path):
+    """开启记忆隔离后：database 自动派生为 data/memory_<卡名>.db，
+    表情包库自动派生为 data/stickers_shared.db（共享）。"""
+    vals = _get(app.port, "/api/config")["values"]
+    assert vals["PER_PERSONA_MEMORY"] is False          # 默认关闭，行为不变
+
+    posted = dict(vals)
+    posted["PER_PERSONA_MEMORY"] = True
+    resp = _post(app.port, "/api/config",
+                 {"values": posted, "mode": "mock", "apply": False})
+    assert resp["ok"], resp
+    cfg = load_config(tmp_path / "config.yaml")
+    assert cfg.database.endswith("memory_card.db")      # 卡文件是 card.yaml
+    assert cfg.sticker.database.endswith("stickers_shared.db")
+
+    # 关闭后不再派生
+    posted["PER_PERSONA_MEMORY"] = False
+    assert _post(app.port, "/api/config",
+                 {"values": posted, "mode": "mock", "apply": False})["ok"]
+    cfg2 = load_config(tmp_path / "config.yaml")
+    assert not cfg2.database.endswith("memory_card.db")
+
+
 def test_persona_endpoints(app, tmp_path):
     p = _get(app.port, "/api/persona")
     assert p["ok"] and p["persona"]["name"] == "小满"

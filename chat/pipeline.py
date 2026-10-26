@@ -78,6 +78,8 @@ class BotPipeline:
                        if cfg.drift.enabled else None)
         # 表情包子系统（可选）
         self.sticker_lib = sticker_lib
+        # 独立表情包共享库（per_persona_memory / sticker.database 分库时非空，由入口设置）
+        self.sticker_store = None
         self._sticker_tagger = None
         if sticker_lib is not None:
             from stickers.tagger import StickerTagger

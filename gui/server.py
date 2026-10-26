@@ -95,11 +95,14 @@ class GUIApp:
             await self.pipeline.flush_ingest()
         except Exception:
             pass
+        old_pipeline, old_store = self.pipeline, self.store
         await self._build(new_cfg, mock)
         self.cfg, self.mock = new_cfg, mock
         self.shown_mem.clear()
-        # 旧 store 最后关：新旧可能指向同一个 SQLite 文件，先建新再关旧
-        # （前一管线的连接已在上面的 flush 中排空）
+        # 新管线就绪后再关旧库（新旧可能指向同一个 SQLite 文件）
+        from main import close_stores
+
+        await close_stores(old_pipeline, old_store)
 
     def close(self) -> None:
         async def _fin() -> None:
@@ -107,10 +110,9 @@ class GUIApp:
                 await self.pipeline.flush_ingest()
             except Exception:
                 pass
-            try:
-                await self.store.close()
-            except Exception:
-                pass
+            from main import close_stores
+
+            await close_stores(self.pipeline, self.store)
 
         try:
             self.bridge.run(_fin())
@@ -234,6 +236,9 @@ class GUIApp:
                 "persona": pipe.persona.name, "greeting": pipe.persona.greeting,
                 "persona_file": self.cfg.persona_file,
                 "group_id": self.cfg.sim_group_id, "database": self.cfg.database,
+                "sticker_database": (self.cfg.sticker.database
+                                     or f"{self.cfg.database}（同库）"),
+                "per_persona_memory": self.cfg.per_persona_memory,
                 "messages": stats.get("messages", 0),
                 "staging": stage.get("staging", 0), "ltm": stage.get("ltm", 0),
                 "chat_key_set": bool(self.cfg.llm.api_key),

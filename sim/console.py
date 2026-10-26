@@ -31,7 +31,6 @@ from chat.pipeline import BotPipeline
 from config import BotConfig
 from embed.base import create_embedder
 from embed.mock import HashEmbedder
-from memory.store import MemoryStore
 from persona.card import PersonaCard
 from sim.tables import memories_table, recall_table, stats_table
 from stickers.library import StickerLibrary
@@ -60,17 +59,19 @@ async def run_sim(cfg: BotConfig, mock: bool = False, config_path: str = "config
     warmup()
 
     clock = Clock()
-    store = MemoryStore(cfg.database)
-    await store.init()
+    from main import _open_stores, close_stores
+
+    store, sticker_store = await _open_stores(cfg)
     chat = MockChatClient() if mock else LLMChatClient(cfg)
     embedder = HashEmbedder() if mock else create_embedder(cfg)
     persona = PersonaCard.load_yaml(cfg.persona_file)
     pipe = BotPipeline(store, chat, embedder, persona, cfg, clock,
                        persona_file=cfg.persona_file,
-                       sticker_lib=(StickerLibrary(store, cfg)
+                       sticker_lib=(StickerLibrary(sticker_store or store, cfg)
                                     if cfg.sticker.enabled else None),
                        vision=(create_vision(cfg, mock)
                                if cfg.sticker.enabled else None))
+    pipe.sticker_store = sticker_store
 
     console = Console()
     mode = "[yellow]MOCK 离线[/]" if mock else "[green]API[/]"
@@ -208,5 +209,5 @@ async def run_sim(cfg: BotConfig, mock: bool = False, config_path: str = "config
             report_ingest()
     finally:
         await pipe.flush_ingest()
-        await store.close()
+        await close_stores(pipe, store)
         console.print("\n记忆已保存在本地库，随时回来继续。再见 👋")

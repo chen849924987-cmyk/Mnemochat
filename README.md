@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/chen849924987-cmyk/Mnemochat/actions/workflows/ci.yml/badge.svg)](https://github.com/chen849924987-cmyk/Mnemochat/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-92%20passed-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-94%20passed-brightgreen)]()
 
 **English README → [README.en.md](README.en.md)**
 
@@ -190,6 +190,7 @@ python main.py --edit-persona personas/deepseek_whale.yaml
   - `local`：`pip install -r requirements-local-embed.txt` 后切换，完全离线。
   - 不同模型向量空间不兼容——切换后运行 `python main.py --reembed` 补齐存量向量（旧向量保留，按模型分行存储）。
 - 衰减（`decay.*`）、显著性权重（`recall.weights.*`）、触发策略（`behavior.*`）全部可调。
+- **记忆按卡隔离**：`per_persona_memory: true` 后每张角色卡自动使用 `data/memory_<卡名>.db`——换卡即换记忆宇宙，互不相通；表情包库仍共享（自动 `data/stickers_shared.db`，也可用 `sticker.database` 显式指定），梗是大家共有的。旧库数据不自动迁移，可用 `--export` / `--import` 搬运。
 
 ## 设计细节
 
@@ -216,13 +217,13 @@ editor/            人格卡修改器（本地网页：滑条调参/卡导入/�
 gui/               图形控制台（聊天模拟器+记忆管理+人格卡+配置生成，本地网页）
 sim/               控制台模拟器、记忆管理台、表格渲染
 personas/          角色卡（default 小满 / dafeiyu 大肥鱼 / deepseek_whale 小鲸鱼）
-tests/             92 个离线测试（衰减/入库/检索/巩固/人格/漂移/兴趣评分/多群/适配器/卡转换/表情包/导出/图形控制台/端到端验收）
+tests/             94 个离线测试（衰减/入库/检索/巩固/人格/漂移/兴趣评分/多群/适配器/卡转换/表情包/导出/图形控制台/端到端验收）
 ```
 
 ## 测试
 
 ```bash
-python -m pytest tests/ -q      # 92 passed，全程离线
+python -m pytest tests/ -q      # 94 passed，全程离线
 ```
 
 验收用例 `tests/test_e2e_acceptance.py::test_remember_allergy_after_two_weeks`：说过过敏 → 快进 14 天 → 清空对话窗口 → 相关话题时以"约两周前"的口吻召回，且召回强化生效。
