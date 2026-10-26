@@ -1,7 +1,7 @@
 # Mnemochat · 群聊长期记忆机器人
 
 [![CI](https://github.com/chen849924987-cmyk/Mnemochat/actions/workflows/ci.yml/badge.svg)](https://github.com/chen849924987-cmyk/Mnemochat/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Tests](https://img.shields.io/badge/tests-97%20passed-brightgreen)]()
 
 **English README → [README.en.md](README.en.md)**
@@ -272,4 +272,4 @@ python -m pytest tests/ -q      # 97 passed，全程离线
 
 ## 许可证
 
-[MIT](LICENSE)
+[Apache License 2.0](LICENSE)

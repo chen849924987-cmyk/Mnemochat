@@ -1,7 +1,7 @@
 # Mnemochat · Long-Term Memory for Group-Chat Bots
 
 [![CI](https://github.com/chen849924987-cmyk/Mnemochat/actions/workflows/ci.yml/badge.svg)](https://github.com/chen849924987-cmyk/Mnemochat/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
 **中文说明 → [README.md](README.md)**
 
@@ -122,4 +122,4 @@ Design informed by great work in the community: [Mem0](https://github.com/mem0ai
 
 ## License
 
-[MIT](LICENSE)
+[Apache License 2.0](LICENSE)
