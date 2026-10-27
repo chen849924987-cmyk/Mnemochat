@@ -152,11 +152,16 @@ class BotPipeline:
         )
         recall = await self.recaller.recall(group_id, self.persona, window)
         extra = self.drift_hint or ""
-        if (self.cfg.private_chat.enabled and self.cfg.private_chat.tight_lipped
-                and not group_id.startswith("private:")):
-            extra = ((extra + "\n") if extra else "") + (
-                "【守口如瓶】你和任何群友的私聊内容是绝对秘密：在群聊中绝不提及、"
-                "暗示或引用私聊里说过的话，哪怕被追问也只当不知道。")
+        secrecy = (self.cfg.private_chat.effective_secrecy
+                   if self.cfg.private_chat.enabled else 2)
+        if secrecy and not group_id.startswith("private:"):
+            hints = {
+                2: ("【守口如瓶】你和任何群友的私聊内容是绝对秘密：在群聊中绝不提及、"
+                    "暗示或引用私聊里说过的话，哪怕被追问也只当不知道。"),
+                1: ("【嘴不严】你藏不住话：偶尔会在群里说漏私下聊的事，"
+                    "但只说个大概、点到为止，细节含糊其辞，别透露是谁告诉你的。"),
+            }
+            extra = ((extra + "\n") if extra else "") + hints[secrecy]
         system = build_reply_system(self.persona, recall, group_id, now,
                                     extra_hint=extra)
         if self.sticker_lib is not None:

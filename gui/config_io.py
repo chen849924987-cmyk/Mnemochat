@@ -149,7 +149,7 @@ drift:
 private_chat:
   enabled: @@PRIVATE_CHAT_ENABLED@@
   always_reply: @@PRIVATE_CHAT_ALWAYS_REPLY@@   # 私聊每条必回；关掉则走兴趣评分
-  tight_lipped: @@PRIVATE_CHAT_TIGHT_LIPPED@@   # 守口如瓶：私聊记忆绝不流入群聊
+  secrecy_level: @@PRIVATE_CHAT_SECRECY@@       # 保密等级：2=守口如瓶 1=偶尔说漏 0=口无遮拦
 
 # ---------- 社交与串门（多角色卡互访） ----------
 # 客卡定期到主卡所在的模拟群串门：客人用自己的卡+记忆库，两边都记住这次会面；
@@ -255,7 +255,7 @@ def values_from_config(cfg) -> dict:
         "DRIFT_ENABLED": cfg.drift.enabled,
         "PRIVATE_CHAT_ENABLED": cfg.private_chat.enabled,
         "PRIVATE_CHAT_ALWAYS_REPLY": cfg.private_chat.always_reply,
-        "PRIVATE_CHAT_TIGHT_LIPPED": cfg.private_chat.tight_lipped,
+        "PRIVATE_CHAT_SECRECY": cfg.private_chat.effective_secrecy,
         "SOCIAL_ENABLED": cfg.social.enabled,
         "SOCIAL_HOST_REPLIES": cfg.social.host_replies,
         "SOCIAL_PREFIX_GUEST_NAME": cfg.social.prefix_guest_name,
@@ -322,7 +322,7 @@ FORM_KEYS = frozenset({
     "ONEBOT_WS_URL", "ONEBOT_TOKEN",
     "TELEGRAM_TOKEN", "TG_POLL_TIMEOUT", "TG_REPLY_TO_MESSAGE",
     "DRIFT_ENABLED",
-    "PRIVATE_CHAT_ENABLED", "PRIVATE_CHAT_ALWAYS_REPLY", "PRIVATE_CHAT_TIGHT_LIPPED",
+    "PRIVATE_CHAT_ENABLED", "PRIVATE_CHAT_ALWAYS_REPLY", "PRIVATE_CHAT_SECRECY",
     "SOCIAL_ENABLED", "SOCIAL_HOST_REPLIES", "SOCIAL_PREFIX_GUEST_NAME",
     "SOCIAL_VISITS",
     "STICKER_ENABLED", "STICKER_MAX_KB", "STICKER_RETAIN_DAYS",

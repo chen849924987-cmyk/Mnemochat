@@ -12,12 +12,17 @@ async def test_private_memory_sealed_from_group(store, cfg, clock, persona, seed
     probe = MessageRecord(group_id="g1", user_id="小明", user_name="小明",
                           content="聊聊秘密", ts=clock.now())
 
-    cfg.private_chat.tight_lipped = True
+    cfg.private_chat.secrecy_level = 2
     persona.boundary.cross_group = True     # cross_group 也压不过守口如瓶
     rec = await recaller.recall("g1", persona, [probe], reinforce=False)
     assert not any("小秘密" in it.memory.content for it in rec.items)
 
-    cfg.private_chat.tight_lipped = False   # 关掉守口如瓶：cross_group 放行
+    cfg.private_chat.secrecy_level = 0      # 口无遮拦：无视 cross_group 直接放行
+    rec = await recaller.recall("g1", persona, [probe], reinforce=False)
+    assert any("小秘密" in it.memory.content for it in rec.items)
+
+    cfg.private_chat.secrecy_level = 0
+    persona.boundary.cross_group = False    # 放行不依赖 cross_group
     rec = await recaller.recall("g1", persona, [probe], reinforce=False)
     assert any("小秘密" in it.memory.content for it in rec.items)
 
@@ -52,3 +57,33 @@ def test_parse_private_message():
                 "user_id": 10001, "message": [{"type": "text", "data": {"text": "hi"}}]}
     assert parse_private_message(group_ev) is None
     assert parse_group_message(ev, None) is None       # 群解析器不吞私聊
+
+
+async def test_secrecy_level_1_probabilistic_leak(store, cfg, clock, persona,
+                                                  seed_memory, embedder, monkeypatch):
+    """偶尔说漏嘴：骰子没中 → 拦住；中了 → 放行进群聊上下文。"""
+    from memory.recall import Recaller
+
+    await seed_memory("私下说想学吉他", group_id="private:10001")
+    recaller = Recaller(store, embedder, cfg, clock)
+    probe = MessageRecord(group_id="g1", user_id="小明", user_name="小明",
+                          content="吉他", ts=clock.now())
+    persona.boundary.cross_group = False    # 说漏不走 cross_group，走骰子
+    cfg.private_chat.secrecy_level = 1
+
+    monkeypatch.setattr("random.random", lambda: 0.9)
+    rec = await recaller.recall("g1", persona, [probe], reinforce=False)
+    assert not any("吉他" in it.memory.content for it in rec.items)
+
+    monkeypatch.setattr("random.random", lambda: 0.1)
+    rec = await recaller.recall("g1", persona, [probe], reinforce=False)
+    assert any("吉他" in it.memory.content for it in rec.items)
+
+
+def test_secrecy_legacy_compat():
+    """旧字段 tight_lipped 仍兼容：false → 0 档；显式 secrecy_level 优先。"""
+    from config import PrivateChatConfig
+
+    assert PrivateChatConfig().effective_secrecy == 2
+    assert PrivateChatConfig(tight_lipped=False).effective_secrecy == 0
+    assert PrivateChatConfig(tight_lipped=False, secrecy_level=1).effective_secrecy == 1

@@ -118,7 +118,7 @@ telegram:
 private_chat:
   enabled: true
   always_reply: true       # 私聊每条必回；关掉则私聊也走兴趣评分
-  tight_lipped: true       # 守口如瓶：私聊记忆绝不流入群聊（优先级高于 cross_group）
+  secrecy_level: 2         # 守口如瓶参数：2=守口如瓶 1=偶尔说漏嘴 0=口无遮拦（旧字段 tight_lipped 仍兼容）
 
 # ---------- 社交与串门（多角色卡互访） ----------
 # 客卡定期到主卡所在的模拟群串门；GUI「设置 · 社交与串门」可视化维护

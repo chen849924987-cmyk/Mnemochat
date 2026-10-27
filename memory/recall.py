@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+import random
+
 import logging
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
@@ -85,19 +87,32 @@ class Recaller:
             return RecallResult([], query_text)
         rows = await self.store.get_memories_by_ids(list(cand_ids))
 
-        # 过滤：active 状态 + staging 时限 + 守口如瓶 + 人格知识边界
+        # 过滤：active 状态 + staging 时限 + 保密等级 + 人格知识边界
         stage_cutoff = now - rcfg.staging_min_age_hours * 3600
         seal = (self.cfg.private_chat.enabled
-                and self.cfg.private_chat.tight_lipped)
+                and self.cfg.private_chat.effective_secrecy)
+        private_leak_ok = False
+        if seal == 1 and group_id.startswith("private:") is False:
+            # 偶尔说漏嘴：本次回复掷一次骰子（约 1/3 概率漏进群聊上下文）
+            private_leak_ok = random.random() < 0.35
         allowed: list[MemoryRecord] = []
         for mem in rows.values():
             if mem.status != "active":
                 continue
             if mem.stage != "ltm" and mem.created_at > stage_cutoff:
                 continue
-            if (seal and group_id != mem.group_id
-                    and mem.group_id.startswith("private:")):
-                continue   # 守口如瓶：私聊记忆绝不注入任何其他会话（优先级最高）
+            if (mem.group_id.startswith("private:")
+                    and group_id != mem.group_id):
+                if seal == 2:
+                    continue   # 守口如瓶：绝不注入任何其他会话（优先级最高）
+                if seal == 1:
+                    if not private_leak_ok:
+                        continue   # 这次没说漏
+                    allowed.append(mem)   # 说漏：骰子即放行，不再看 cross_group
+                    continue
+                if seal == 0:
+                    allowed.append(mem)   # 口无遮拦：无视 cross_group 直接放行
+                    continue
             if not persona.allows(mem, group_id):
                 continue
             allowed.append(mem)

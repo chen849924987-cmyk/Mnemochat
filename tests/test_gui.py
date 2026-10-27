@@ -143,7 +143,7 @@ def test_config_roundtrip_and_preserve_advanced(app, tmp_path):
     posted["STICKER_RETAIN_DAYS"] = 30        # 表情包遗忘可选项
     posted["PRIVATE_CHAT_ENABLED"] = True
     posted["PRIVATE_CHAT_ALWAYS_REPLY"] = False
-    posted["PRIVATE_CHAT_TIGHT_LIPPED"] = False   # 守口如瓶可关
+    posted["PRIVATE_CHAT_SECRECY"] = 1            # 偶尔说漏嘴档
     try:
         resp = _post(app.port, "/api/config",
                      {"values": posted, "mode": "mock", "apply": False})
@@ -159,7 +159,8 @@ def test_config_roundtrip_and_preserve_advanced(app, tmp_path):
         assert cfg.sticker.retain_days == 30
         assert cfg.private_chat.enabled is True
         assert cfg.private_chat.always_reply is False
-        assert cfg.private_chat.tight_lipped is False
+        assert cfg.private_chat.secrecy_level == 1
+        assert cfg.private_chat.effective_secrecy == 1
         assert read_env(env_path)["DEEPSEEK_API_KEY"] == "sk-test-123"
 
         # 界面未展示的高级项：手改 yaml 后 GUI 保存不丢

@@ -224,15 +224,24 @@ class PrivateChatConfig(BaseModel):
 
     - always_reply：私聊里对方是直接跟你说话 → 每条必回（冷却防刷屏仍生效）；
       关掉则私聊也走兴趣评分；
-    - tight_lipped（守口如瓶）：私聊记忆在任何情况下不流入群聊——
-      即使 boundary.cross_group 开着也强制拦截，并在群聊 prompt 里注入保密提醒。
-      单向封印：群聊记忆能否在私聊中想起，仍由 cross_group 决定。"""
+    - secrecy_level 保密等级（旧字段 tight_lipped 仍兼容）：
+      2 = 守口如瓶：私聊记忆绝不流入群聊（优先级高于 cross_group）+ 群聊保密提醒；
+      1 = 偶尔说漏嘴：私聊记忆以约 1/3 概率漏进群聊上下文，prompt 提示"只说个大概"；
+      0 = 口无遮拦：不拦截、无视 cross_group，私聊记忆像普通记忆一样在群里可用。
+      单向封印的另一头不变：群聊记忆能否在私聊中想起，仍由 cross_group 决定。"""
 
     model_config = ConfigDict(extra="ignore")
 
     enabled: bool = True
     always_reply: bool = True
-    tight_lipped: bool = True
+    tight_lipped: bool = True          # 旧字段：兼容已有配置，secrecy_level 未设时生效
+    secrecy_level: int | None = None   # None=未显式设置，按 tight_lipped 解析
+
+    @property
+    def effective_secrecy(self) -> int:
+        if self.secrecy_level is not None:
+            return max(0, min(2, self.secrecy_level))
+        return 2 if self.tight_lipped else 0
 
 
 class BotConfig(BaseModel):
