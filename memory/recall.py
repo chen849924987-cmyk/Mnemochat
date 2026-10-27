@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import random
+import re
 
 import logging
 from dataclasses import dataclass, field
@@ -15,7 +16,7 @@ from typing import TYPE_CHECKING, Any
 from config import BotConfig
 from memory import decay
 from memory.models import MemoryRecord, MessageRecord
-from util.text import fts_query
+from util.text import fmt_relative, fts_query
 
 if TYPE_CHECKING:
     from embed.base import EmbeddingProvider
@@ -30,6 +31,7 @@ class ScoredMemory:
     memory: MemoryRecord
     score: float
     factors: dict[str, float] = field(default_factory=dict)
+    display: str | None = None   # 分级压缩后的注入文本；None=原文（存储层永远原文）
 
 
 @dataclass
@@ -39,6 +41,19 @@ class RecallResult:
 
     def __bool__(self) -> bool:
         return bool(self.items)
+
+
+def _compressed_display(mem: MemoryRecord, ret: float) -> str | None:
+    """按保留率给注入文本降级：0.45+ 原文；0.18~0.45 记得大概；<0.18 只剩关键词。"""
+    if ret >= 0.45:
+        return None
+    kws = [k for k in (list(mem.keywords) + list(mem.entities)) if k][:4]
+    if ret < 0.18 and kws:
+        return "（印象模糊，只记得关键词：" + "、".join(kws) + "）"
+    head = re.split(r"[。！？；\n]", mem.content, maxsplit=1)[0].strip()
+    if len(head) > 42:
+        head = head[:42] + "……"
+    return "（记得大概）" + head
 
 
 class Recaller:
@@ -143,7 +158,34 @@ class Recaller:
             scored.append(ScoredMemory(mem, score, factors))
 
         scored.sort(key=lambda s: s.score, reverse=True)
+
+        # 人保底：关于具体的人的记忆在注入里至少保 person_seats 席（人>事，挤不掉的关系）
         top = scored[: rcfg.top_k]
+        if rcfg.person_priority:
+            have = sum(1 for s in top if s.memory.subject_user_id)
+            if have < min(rcfg.person_seats, rcfg.top_k):
+                chosen = {s.memory.id for s in top}
+                for s in scored:
+                    if have >= rcfg.person_seats:
+                        break
+                    if s.memory.id in chosen or not s.memory.subject_user_id:
+                        continue
+                    # 换掉 top 末尾一条非人记忆
+                    for i in range(len(top) - 1, -1, -1):
+                        if not top[i].memory.subject_user_id:
+                            chosen.discard(top[i].memory.id)
+                            top[i] = s
+                            chosen.add(s.memory.id)
+                            have += 1
+                            break
+            top.sort(key=lambda s: s.score, reverse=True)
+
+        # 分级压缩注入：老记忆按保留率降级为"大概/关键词"，存储原文不动
+        if rcfg.compress:
+            for s in top:
+                ret = decay.retention(
+                    (now - s.memory.anchor_ts) / 86400.0, s.memory.strength)
+                s.display = _compressed_display(s.memory, ret)
 
         # 检索即强化：越想起越牢固
         if reinforce and top:
@@ -152,3 +194,40 @@ class Recaller:
                 self.cfg.decay.reinforce_factor, self.cfg.decay.strength_cap_days,
             )
         return RecallResult(top, query_text)
+
+    async def core_block(self, group_id: str, persona) -> str:
+        """核心记忆钉：每轮必带的"长期在意的人与事"（与本次话题无关也带上）。
+
+        候选 = 关系(bond)/偏好(preference)/关于具体的人的记忆，按
+        重要性+召回+情绪排序取前 core_top_k 条；同样遵守人格边界与守口如瓶。"""
+        rcfg = self.cfg.recall
+        if not rcfg.core_memory:
+            return ""
+        rows = await self.store.list_memories(stage="ltm", limit=400)
+        seal = (self.cfg.private_chat.enabled
+                and self.cfg.private_chat.effective_secrecy)
+        now = self.clock.now()
+        cands = []
+        for m in rows:
+            if m.status != "active":
+                continue
+            foreign_private = (m.group_id.startswith("private:")
+                               and m.group_id != group_id)
+            if foreign_private and seal >= 1:
+                continue   # 私聊秘密不进核心钉
+            if not foreign_private and not persona.allows(m, group_id):
+                continue   # 非 0 档的跨会话记忆仍走人格边界
+            if not (m.kind in ("bond", "preference") or m.subject_user_id):
+                continue
+            cands.append(m)
+        if not cands:
+            return ""
+        cands.sort(key=lambda m: (m.importance, m.access_count, m.emotion),
+                   reverse=True)
+        lines = ["【核心记忆】这些是你长期放在心上的人和事，与当前话题无关也可以自然想起："]
+        for m in cands[: rcfg.core_top_k]:
+            when = fmt_relative(m.anchor_ts, now)
+            tag = {"bond": "关系", "preference": "偏好"}.get(m.kind, "")
+            who = f"关于{m.subject_user_id}：" if m.subject_user_id else ""
+            lines.append(f"- {who}{m.content}（{tag or '要紧事'}，{when}起就在心上）")
+        return "\n".join(lines)

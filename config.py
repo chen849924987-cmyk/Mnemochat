@@ -100,6 +100,12 @@ class RecallConfig(BaseModel):
     entity_candidates: int = 20
     staging_min_age_hours: float = 6
     weights: RecallWeights = RecallWeights()
+    # 注入端拟人化（存储层永远原文，不违背永不删库）
+    compress: bool = True           # 分级压缩：R 低的老记忆以"记得大概/关键词"注入
+    person_priority: bool = True    # 人保底：关于具体的人的记忆至少保 3 席
+    person_seats: int = 3
+    core_memory: bool = True        # 核心记忆钉：每轮必带"长期在意的人与事"块
+    core_top_k: int = 6
 
 
 class DecayConfig(BaseModel):

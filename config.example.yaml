@@ -70,6 +70,11 @@ recall:
     retention: 0.20
     access: 0.10
     importance_emotion: 0.10
+  compress: true              # 分级压缩注入：R 低的老记忆以"记得大概/关键词"出现（存储原文不动）
+  person_priority: true       # 人保底：关于具体的人的记忆在注入里至少保 3 席
+  person_seats: 3
+  core_memory: true           # 核心记忆钉：每轮必带"长期在意的人与事"块
+  core_top_k: 6
 
 # ---------- 衰减（艾宾浩斯） ----------
 decay:

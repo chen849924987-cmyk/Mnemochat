@@ -4,7 +4,7 @@
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Tests](https://img.shields.io/badge/tests-97%20passed-brightgreen)]()
 
-**English README → [README.en.md](README.en.md)**
+**English README → [README.en.md](README.en.md)** · [更新日志 → CHANGELOG.md](CHANGELOG.md)
 
 > 让 API 驱动的群聊机器人像人一样记住群友——会遗忘、会想起、越想起越牢固，但**永不删库**。
 
@@ -244,6 +244,19 @@ pyinstaller Mnemochat.spec
   - 不同模型向量空间不兼容——切换后运行 `python main.py --reembed` 补齐存量向量（旧向量保留，按模型分行存储）。
 - 衰减（`decay.*`）、显著性权重（`recall.weights.*`）、触发策略（`behavior.*`）全部可调。
 - **记忆按卡隔离**：`per_persona_memory: true` 后每张角色卡自动使用 `data/memory_<卡名>.db`——换卡即换记忆宇宙，互不相通；表情包库仍共享（自动 `data/stickers_shared.db`，也可用 `sticker.database` 显式指定），梗是大家共有的。旧库数据不自动迁移，可用 `--export` / `--import` 搬运。
+
+## 注入端拟人化（分级压缩 + 人保底 + 核心记忆钉）
+
+存储层永远原文、永不删库；"遗忘"体现在**注入端**：
+
+- **分级压缩**：保留率 R 低的老记忆以降级形式出现——R≥0.45 注入原文，
+  0.18~0.45 注入"（记得大概）+首句"，<0.18 注入"（印象模糊，只记得关键词：…）"——
+  人对旧事的记忆本来就是模糊摘要，还省 token；
+- **人保底**：关于具体的人的记忆在召回注入中至少保 3 席，事件细节挤不掉关系；
+- **核心记忆钉**：每轮必带"长期在意的人与事"（关系/偏好/关于具体的人），
+  与当前话题无关也能自然想起——对应"人和约定不沉底，事反正能再查"。
+
+均可在 `recall.*` 配置关闭。
 
 ## 设计细节
 

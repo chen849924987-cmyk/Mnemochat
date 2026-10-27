@@ -164,6 +164,9 @@ class BotPipeline:
             extra = ((extra + "\n") if extra else "") + hints[secrecy]
         system = build_reply_system(self.persona, recall, group_id, now,
                                     extra_hint=extra)
+        core = await self.recaller.core_block(group_id, self.persona)
+        if core:
+            system = f"{system}\n\n{core}"
         if self.sticker_lib is not None:
             block = await self.sticker_lib.prompt_block(group_id)
             if block:

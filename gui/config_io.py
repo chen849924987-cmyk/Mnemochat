@@ -98,6 +98,9 @@ recall:
     retention: @@W_RETENTION@@
     access: @@W_ACCESS@@
     importance_emotion: @@W_IMPORTANCE_EMOTION@@
+  compress: @@RECALL_COMPRESS@@           # 分级压缩注入：老记忆以"大概/关键词"出现
+  person_priority: @@RECALL_PERSON_PRIORITY@@   # 人保底 3 席
+  core_memory: @@RECALL_CORE@@            # 核心记忆钉（每轮必带）
 
 # ---------- 衰减（艾宾浩斯） ----------
 decay:
@@ -287,6 +290,9 @@ def values_from_config(cfg) -> dict:
         "W_RETENTION": cfg.recall.weights.retention,
         "W_ACCESS": cfg.recall.weights.access,
         "W_IMPORTANCE_EMOTION": cfg.recall.weights.importance_emotion,
+        "RECALL_COMPRESS": cfg.recall.compress,
+        "RECALL_PERSON_PRIORITY": cfg.recall.person_priority,
+        "RECALL_CORE": cfg.recall.core_memory,
         "DECAY_INITIAL_BASE": cfg.decay.initial_base_days,
         "DECAY_REINFORCE": cfg.decay.reinforce_factor,
         "DECAY_CAP": cfg.decay.strength_cap_days,
@@ -323,6 +329,7 @@ FORM_KEYS = frozenset({
     "TELEGRAM_TOKEN", "TG_POLL_TIMEOUT", "TG_REPLY_TO_MESSAGE",
     "DRIFT_ENABLED",
     "PRIVATE_CHAT_ENABLED", "PRIVATE_CHAT_ALWAYS_REPLY", "PRIVATE_CHAT_SECRECY",
+    "RECALL_COMPRESS", "RECALL_PERSON_PRIORITY", "RECALL_CORE",
     "SOCIAL_ENABLED", "SOCIAL_HOST_REPLIES", "SOCIAL_PREFIX_GUEST_NAME",
     "SOCIAL_VISITS",
     "STICKER_ENABLED", "STICKER_MAX_KB", "STICKER_RETAIN_DAYS",

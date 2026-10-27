@@ -30,7 +30,8 @@ def render_memory_block(recall: "RecallResult", persona: "PersonaCard", now: flo
     for item in recall.items:
         mem = item.memory
         when = fmt_relative(mem.anchor_ts, now)
-        lines.append(f"- {when}，{mem.content}")
+        text = getattr(item, "display", None) or mem.content
+        lines.append(f"- {when}，{text}")
     return f"【记忆使用准则】\n{stance}\n\n" + "\n".join(lines)
 
 
