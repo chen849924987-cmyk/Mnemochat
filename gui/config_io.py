@@ -145,6 +145,12 @@ drift:
   sample_size: 12
   adherence_threshold: 6.0
 
+# ---------- 好友私聊（private:<QQ号> 虚拟群，记忆与群聊完全分开） ----------
+private_chat:
+  enabled: @@PRIVATE_CHAT_ENABLED@@
+  always_reply: @@PRIVATE_CHAT_ALWAYS_REPLY@@   # 私聊每条必回；关掉则走兴趣评分
+  tight_lipped: @@PRIVATE_CHAT_TIGHT_LIPPED@@   # 守口如瓶：私聊记忆绝不流入群聊
+
 # ---------- 社交与串门（多角色卡互访） ----------
 # 客卡定期到主卡所在的模拟群串门：客人用自己的卡+记忆库，两边都记住这次会面；
 # GUI「聊天」页可手动触发，自动调度按 every_hours 间隔
@@ -247,6 +253,9 @@ def values_from_config(cfg) -> dict:
         "TG_POLL_TIMEOUT": cfg.telegram.poll_timeout,
         "TG_REPLY_TO_MESSAGE": cfg.telegram.reply_to_message,
         "DRIFT_ENABLED": cfg.drift.enabled,
+        "PRIVATE_CHAT_ENABLED": cfg.private_chat.enabled,
+        "PRIVATE_CHAT_ALWAYS_REPLY": cfg.private_chat.always_reply,
+        "PRIVATE_CHAT_TIGHT_LIPPED": cfg.private_chat.tight_lipped,
         "SOCIAL_ENABLED": cfg.social.enabled,
         "SOCIAL_HOST_REPLIES": cfg.social.host_replies,
         "SOCIAL_PREFIX_GUEST_NAME": cfg.social.prefix_guest_name,
@@ -313,6 +322,7 @@ FORM_KEYS = frozenset({
     "ONEBOT_WS_URL", "ONEBOT_TOKEN",
     "TELEGRAM_TOKEN", "TG_POLL_TIMEOUT", "TG_REPLY_TO_MESSAGE",
     "DRIFT_ENABLED",
+    "PRIVATE_CHAT_ENABLED", "PRIVATE_CHAT_ALWAYS_REPLY", "PRIVATE_CHAT_TIGHT_LIPPED",
     "SOCIAL_ENABLED", "SOCIAL_HOST_REPLIES", "SOCIAL_PREFIX_GUEST_NAME",
     "SOCIAL_VISITS",
     "STICKER_ENABLED", "STICKER_MAX_KB", "STICKER_RETAIN_DAYS",

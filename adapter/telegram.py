@@ -23,11 +23,20 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
-def parse_update(update: dict, bot_username: str | None) -> GroupMessage | None:
-    """非群文本消息返回 None。@机器人的 mention 被剥离并记为 mentioned。"""
+def parse_update(update: dict, bot_username: str | None,
+                 private_chat_enabled: bool = False) -> GroupMessage | None:
+    """非文本消息返回 None。@机器人的 mention 被剥离并记为 mentioned。
+
+    好友私聊（chat.type=private）→ private:<chat_id> 虚拟群（需 private_chat_enabled）。"""
     message = update.get("message") or update.get("edited_message") or {}
     chat = message.get("chat", {}) or {}
-    if chat.get("type") not in ("group", "supergroup"):
+    ctype = chat.get("type")
+    is_private = False
+    if ctype == "private":
+        if not private_chat_enabled:
+            return None
+        is_private = True
+    elif ctype not in ("group", "supergroup"):
         return None
     text = str(message.get("text") or message.get("caption") or "").strip()
     if not text:
@@ -47,12 +56,14 @@ def parse_update(update: dict, bot_username: str | None) -> GroupMessage | None:
                  or sender.get("id", "?"))
     # 群聊里以 user id 为稳定标识（first_name 会变）
     return GroupMessage(
-        group_id=str(chat.get("id", "")),
+        group_id=(f"private:{chat.get('id', '')}" if is_private
+                  else str(chat.get("id", ""))),
         user_id=str(sender.get("id", "")),
         user_name=str(user_name),
         text=text,
-        mentioned_bot=mentioned,
+        mentioned_bot=mentioned or is_private,   # 私聊 = 对方在直接跟你说话
         message_id=str(message.get("message_id", "")) or None,
+        private=is_private,
     )
 
 
@@ -100,7 +111,8 @@ class TelegramAdapter(GroupChatAdapter):
                         continue
                     for update in updates:
                         self._offset = max(self._offset, int(update["update_id"]) + 1)
-                        gm = parse_update(update, self._bot_username)
+                        gm = parse_update(update, self._bot_username,
+                                       private_chat_enabled=self.cfg.private_chat.enabled)
                         if gm is None or not gm.text:
                             continue
                         await self._handle(client, gm)
@@ -111,16 +123,22 @@ class TelegramAdapter(GroupChatAdapter):
         from stickers.library import extract_sticker_markers
 
         try:
+            force_reply = gm.mentioned_bot
+            if (gm.private and self.cfg.private_chat.enabled
+                    and self.cfg.private_chat.always_reply):
+                force_reply = True   # 私聊每条必回（配置可关）
             reply = await self.pipeline.on_user_message(
                 gm.group_id, gm.user_id, gm.user_name, gm.text,
-                force_reply=gm.mentioned_bot,
+                force_reply=force_reply,
             )
             if reply:
                 # Telegram 暂不支持发图表情，剥离标记只发文字
                 _, reply = extract_sticker_markers(reply)
                 if not reply:
                     return
-                params: dict = {"chat_id": int(gm.group_id), "text": reply}
+                chat_id = (int(gm.private_user_id) if gm.private
+                           else int(gm.group_id))
+                params: dict = {"chat_id": chat_id, "text": reply}
                 if self.cfg.telegram.reply_to_message and gm.message_id:
                     params["reply_to_message_id"] = int(gm.message_id)
                 await self._call(client, "sendMessage", params)

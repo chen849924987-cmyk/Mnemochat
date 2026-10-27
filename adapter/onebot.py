@@ -121,6 +121,29 @@ def parse_group_message(event: dict, self_qq: str | None) -> GroupMessage | None
     )
 
 
+def parse_private_message(event: dict) -> GroupMessage | None:
+    """好友私聊 → private:<QQ号> 虚拟群消息（记忆与群聊完全分开）。"""
+    if event.get("post_type") != "message" or event.get("message_type") != "private":
+        return None
+    msg = event.get("message")
+    text, _ = (segments_to_text(msg, None)
+               if isinstance(msg, list) else cq_to_text(str(msg or ""), None))
+    if not text:
+        return None
+    sender = event.get("sender", {}) or {}
+    uid = str(event.get("user_id", "?"))
+    user_name = (sender.get("card") or sender.get("nickname") or uid)
+    return GroupMessage(
+        group_id=f"private:{uid}",
+        user_id=uid,
+        user_name=str(user_name),
+        text=text,
+        mentioned_bot=True,          # 私聊 = 对方在直接跟你说话
+        message_id=str(event.get("message_id", "")) or None,
+        private=True,
+    )
+
+
 def build_reply_segments(reply_text: str, at_qq: str | None, at_sender: bool) -> list[dict]:
     segments: list[dict] = []
     if at_sender and at_qq:
@@ -217,6 +240,8 @@ class OneBotV11Adapter(GroupChatAdapter):
                     self.self_qq = self_id
                     continue
                 gm = parse_group_message(data, self.self_qq)
+                if gm is None and self.cfg.private_chat.enabled:
+                    gm = parse_private_message(data)
                 if gm is not None:
                     if self.self_qq and gm.user_id == self.self_qq:
                         continue   # 自己发出的消息（串门顶号等）不再回流处理
@@ -239,9 +264,13 @@ class OneBotV11Adapter(GroupChatAdapter):
 
         async with self._sem:
             try:
+                force_reply = gm.mentioned_bot
+                if (gm.private and self.cfg.private_chat.enabled
+                        and self.cfg.private_chat.always_reply):
+                    force_reply = True   # 私聊每条必回（配置可关）
                 reply = await self.pipeline.on_user_message(
                     gm.group_id, gm.user_id, gm.user_name, gm.text,
-                    force_reply=gm.mentioned_bot,
+                    force_reply=force_reply,
                 )
                 if reply:
                     # 表情包标记：先发图（先图后字，与角色卡 send_sticker 规范一致）
@@ -268,16 +297,26 @@ class OneBotV11Adapter(GroupChatAdapter):
                     for i, part in enumerate(split_reply(reply)):
                         if i:
                             await asyncio.sleep(random.uniform(0.4, 1.2))
-                        payload = {
-                            "action": "send_group_msg",
-                            "params": {
-                                "group_id": int(gm.group_id),
-                                "message": build_reply_segments(
-                                    part, gm.user_id,
-                                    self.cfg.onebot.at_sender_on_reply and i == 0,
-                                ),
-                            },
-                        }
+                        if gm.private:
+                            payload = {
+                                "action": "send_private_msg",
+                                "params": {
+                                    "user_id": int(gm.private_user_id),
+                                    "message": [{"type": "text",
+                                                 "data": {"text": part}}],
+                                },
+                            }
+                        else:
+                            payload = {
+                                "action": "send_group_msg",
+                                "params": {
+                                    "group_id": int(gm.group_id),
+                                    "message": build_reply_segments(
+                                        part, gm.user_id,
+                                        self.cfg.onebot.at_sender_on_reply and i == 0,
+                                    ),
+                                },
+                            }
                         await ws.send(json.dumps(payload, ensure_ascii=False))
             except Exception:
                 log.exception("处理群 %s 消息失败：%s", gm.group_id, gm.text[:50])

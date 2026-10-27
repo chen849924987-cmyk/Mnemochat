@@ -85,14 +85,19 @@ class Recaller:
             return RecallResult([], query_text)
         rows = await self.store.get_memories_by_ids(list(cand_ids))
 
-        # 过滤：active 状态 + staging 时限 + 人格知识边界
+        # 过滤：active 状态 + staging 时限 + 守口如瓶 + 人格知识边界
         stage_cutoff = now - rcfg.staging_min_age_hours * 3600
+        seal = (self.cfg.private_chat.enabled
+                and self.cfg.private_chat.tight_lipped)
         allowed: list[MemoryRecord] = []
         for mem in rows.values():
             if mem.status != "active":
                 continue
             if mem.stage != "ltm" and mem.created_at > stage_cutoff:
                 continue
+            if (seal and group_id != mem.group_id
+                    and mem.group_id.startswith("private:")):
+                continue   # 守口如瓶：私聊记忆绝不注入任何其他会话（优先级最高）
             if not persona.allows(mem, group_id):
                 continue
             allowed.append(mem)

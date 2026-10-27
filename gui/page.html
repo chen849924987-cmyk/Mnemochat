@@ -356,6 +356,16 @@
       </div>
     </fieldset>
 
+    <fieldset><legend>好友私聊</legend>
+      <div class="grid2">
+        <div><label class="check"><input type="checkbox" data-key="PRIVATE_CHAT_ENABLED" data-type="bool">启用私聊（群员加机器人好友私聊，每个会话独立记忆）</label></div>
+        <div><label class="check"><input type="checkbox" data-key="PRIVATE_CHAT_ALWAYS_REPLY" data-type="bool">私聊每条必回（关掉则走兴趣评分）</label></div>
+      </div>
+      <label class="check"><input type="checkbox" data-key="PRIVATE_CHAT_TIGHT_LIPPED" data-type="bool">守口如瓶（推荐开启）：私聊记忆绝不流入群聊——即使开了跨群共享也强制拦截，并在群聊发言前注入保密提醒</label>
+      <p class="tip">私聊以 private:&lt;QQ号&gt; 虚拟群存储，与群聊记忆完全分开；单向封印——
+        群聊记忆能否在私聊中想起，仍由角色卡边界 cross_group 决定。</p>
+    </fieldset>
+
     <fieldset><legend>社交与串门（多角色卡互访）</legend>
       <div class="grid2">
         <div><label class="check"><input type="checkbox" data-key="SOCIAL_ENABLED" data-type="bool">启用串门自动调度（按每隔 N 小时）</label></div>

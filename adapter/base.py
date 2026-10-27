@@ -23,7 +23,10 @@ log = logging.getLogger(__name__)
 
 @dataclass
 class GroupMessage:
-    """平台无关的群消息（适配器把各自协议翻译成这个）。"""
+    """平台无关的群消息（适配器把各自协议翻译成这个）。
+
+    private=True 时是好友私聊：group_id = "private:<对方ID>" 的虚拟群，
+    记忆按该 ID 独立隔离，回复路由到私聊接口。"""
 
     group_id: str
     user_id: str
@@ -31,6 +34,11 @@ class GroupMessage:
     text: str
     mentioned_bot: bool = False
     message_id: str | None = None
+    private: bool = False
+
+    @property
+    def private_user_id(self) -> str | None:
+        return self.group_id.split(":", 1)[1] if self.private else None
 
 
 class GroupChatAdapter:

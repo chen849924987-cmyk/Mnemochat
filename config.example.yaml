@@ -114,6 +114,20 @@ telegram:
   poll_timeout: 30
   reply_to_message: false
 
+# ---------- 好友私聊（private:<QQ号> 虚拟群，记忆与群聊完全分开） ----------
+private_chat:
+  enabled: true
+  always_reply: true       # 私聊每条必回；关掉则私聊也走兴趣评分
+  tight_lipped: true       # 守口如瓶：私聊记忆绝不流入群聊（优先级高于 cross_group）
+
+# ---------- 社交与串门（多角色卡互访） ----------
+# 客卡定期到主卡所在的模拟群串门；GUI「设置 · 社交与串门」可视化维护
+social:
+  enabled: true
+  host_replies: true       # 客人发言后主卡接话
+  prefix_guest_name: true  # QQ 顶号模式：客人发言前缀【名字】
+  visits: []               # 例：- {persona_file: personas/dafeiyu.yaml, database: data/memory_dafeiyu.db, every_hours: 8}
+
 # ---------- 人格漂移检测 ----------
 # 每次巩固后抽样评审机器人近期发言与角色卡的一致性；
 # 判定漂移时注入一段"角色校准提醒"到后续回复的 system prompt，直到恢复

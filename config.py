@@ -219,6 +219,22 @@ class SocialConfig(BaseModel):
     prefix_guest_name: bool = True  # QQ 顶号模式：客人发言前缀【名字】，防身份混淆
 
 
+class PrivateChatConfig(BaseModel):
+    """好友私聊：每个私聊 = 一个 private:<QQ号> 的虚拟群，记忆与群聊完全分开。
+
+    - always_reply：私聊里对方是直接跟你说话 → 每条必回（冷却防刷屏仍生效）；
+      关掉则私聊也走兴趣评分；
+    - tight_lipped（守口如瓶）：私聊记忆在任何情况下不流入群聊——
+      即使 boundary.cross_group 开着也强制拦截，并在群聊 prompt 里注入保密提醒。
+      单向封印：群聊记忆能否在私聊中想起，仍由 cross_group 决定。"""
+
+    model_config = ConfigDict(extra="ignore")
+
+    enabled: bool = True
+    always_reply: bool = True
+    tight_lipped: bool = True
+
+
 class BotConfig(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
@@ -242,6 +258,7 @@ class BotConfig(BaseModel):
     drift: DriftConfig = DriftConfig()
     sticker: StickerConfig = StickerConfig()
     social: SocialConfig = SocialConfig()
+    private_chat: PrivateChatConfig = PrivateChatConfig()
     sim_group_id: str = "sim-main"
 
 
