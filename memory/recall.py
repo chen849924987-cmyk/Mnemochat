@@ -83,8 +83,15 @@ class Recaller:
 
         # 1) BM25 关键词召回
         bm25_raw = dict(await self.store.bm25_search(fts_query(query_text), rcfg.bm25_candidates))
-        # 2) 向量语义召回
-        qvec = (await self.embedder.embed([query_text]))[0]
+        # 2) 向量语义召回（嵌入不可用时退化为纯关键词召回，机器人不哑巴）
+        try:
+            qvec = (await self.embedder.embed([query_text]))[0]
+        except Exception:
+            import logging
+
+            logging.getLogger(__name__).exception(
+                "嵌入失败，本次召回仅用 BM25/实体（请检查嵌入配置）")
+            qvec = None
         # 候选池不按群圈定：global / cross_group / 私聊的记忆也要能被召回，
         # 隐私与边界统一交给下方 persona.allows + 守口如瓶过滤（单一执行点）
         vec_sims = dict(
@@ -136,7 +143,10 @@ class Recaller:
         if not allowed:
             return RecallResult([], query_text)
 
-        sims = await self.store.vector_sims(self.embedder.name, qvec, [m.id for m in allowed])
+        sims = ({})
+        if qvec is not None:
+            sims = await self.store.vector_sims(self.embedder.name, qvec,
+                                                [m.id for m in allowed])
         # bm25() 为负值（越接近 0 越相关），min-max 归一到 [0,1]
         bm25_ids = [m.id for m in allowed if m.id in bm25_raw]
         bm25_norm = dict(zip(bm25_ids, decay.normalize([bm25_raw[i] for i in bm25_ids])))

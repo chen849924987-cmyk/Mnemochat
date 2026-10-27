@@ -195,88 +195,199 @@ def main() -> None:
         asyncio.run(run_sim(cfg, mock=args.mock, config_path=args.config))
 
 
-async def _cmd_check(cfg, mock: bool) -> int:
-    """启动体检：返回失败项数（0 = 一切就绪）。"""
+async def run_checks(cfg, mock: bool) -> list[dict]:
+    """启动体检的全部检查项，返回结构化结果（CLI 与图形控制台共用）。
+
+    每项 {name, ok, detail, warn}：ok=False 为致命问题；
+    warn=True 为提示性信息（不影响启动，但值得知道）。"""
     import time as _time
 
-    from chat.llm import LLMChatClient
-    from embed.base import create_embedder
-    from memory.store import MemoryStore
-    from persona.card import PersonaCard
     from util.text import seg
 
-    failures = 0
+    checks: list[dict] = []
 
-    def report(name: str, passed: bool, detail: str = "") -> None:
-        nonlocal failures
-        mark = "✓" if passed else "✗"
-        suffix = f" —— {detail}" if detail else ""
-        print(f"  [{mark}] {name}{suffix}")
-        if not passed:
-            failures += 1
+    def add(name: str, ok: bool, detail: str = "", warn: bool = False) -> None:
+        checks.append({"name": name, "ok": ok, "detail": detail, "warn": warn})
 
-    print(f"Mnemochat 启动体检{'' if mock else '（含 API 连通性检查）'}")
-
+    # 1. 角色卡
     try:
+        from persona.card import PersonaCard
+
         persona = PersonaCard.load_yaml(cfg.persona_file)
-        report("角色卡", True,
-               f"{persona.name} · 性格参数 {len(persona.parameters)} 项 · "
-               f"黑名单 {len(persona.ai_flavor_blocklist)} 条")
+        add("角色卡", True,
+            f"{persona.name} · 性格参数 {len(persona.parameters)} 项 · "
+            f"黑名单 {len(persona.ai_flavor_blocklist)} 条 · 兴趣词 {len(persona.interests)} 个")
     except Exception as e:
-        report("角色卡", False, str(e))
+        add("角色卡", False, str(e))
 
+    # 2. 数据库（含 FTS5 与完整性）
     try:
+        from memory.store import MemoryStore
+
         store = MemoryStore(cfg.database)
         await store.init()
-        stats = await store.stats()
-        total_mem = sum(stats["stage"].values())
-        detail = (f"{cfg.database} · 记忆 {total_mem} 条 · 消息 {stats['messages']} 条 · "
-                  f"嵌入模型 {list(stats['embeddings']) or '无'}")
-        if cfg.sticker.enabled:
-            from stickers.library import StickerLibrary
+        try:
+            stats = await store.stats()
+            total_mem = sum(stats["stage"].values())
+            qc_rows = await store.db.execute_fetchall("PRAGMA quick_check")
+            qc = qc_rows[0][0] if qc_rows else "unknown"
+            detail = (f"{cfg.database} · 记忆 {total_mem} 条 · 消息 {stats['messages']} 条 · "
+                      f"完整性 {qc}")
+            if cfg.sticker.enabled:
+                from stickers.library import StickerLibrary
 
-            s = await StickerLibrary(store, cfg).stats()
-            detail += f" · 表情包 {s['total']} 张（已打标 {s['tagged']}）"
-        report("数据库（含 FTS5）", True, detail)
-        await store.close()
+                st = await StickerLibrary(store, cfg).stats()
+                detail += f" · 表情包 {st['total']} 张（已打标 {st['tagged']}）"
+            add("数据库（含 FTS5 与完整性）", qc == "ok", detail)
+        finally:
+            await store.close()
     except Exception as e:
-        report("数据库（含 FTS5）", False, str(e))
+        add("数据库（含 FTS5 与完整性）", False, str(e))
 
+    # 3. 数据目录可写
+    try:
+        from pathlib import Path
+
+        data_dir = Path(cfg.database).parent
+        data_dir.mkdir(parents=True, exist_ok=True)
+        probe = data_dir / ".write_probe"
+        probe.write_text("ok", encoding="utf-8")
+        probe.unlink()
+        add("数据目录可写", True, str(data_dir))
+    except Exception as e:
+        add("数据目录可写", False, f"{cfg.database} 所在目录不可写：{e}")
+
+    # 4. 中文分词
     try:
         tokens = seg("花生过敏体检测试")
-        report("中文分词（jieba）", bool(tokens), f"{tokens}")
+        add("中文分词（jieba）", bool(tokens), f"{tokens}")
     except Exception as e:
-        report("中文分词（jieba）", False, str(e))
+        add("中文分词（jieba）", False, str(e))
 
-    if not mock:
-        if not cfg.llm.api_key:
-            report("聊天模型 API", False,
-                   "未配置 api_key（.env 的 DEEPSEEK_API_KEY 或 config.yaml llm.api_key）")
-        else:
+    # 5. 记忆隔离与守口如瓶提示（提示性）
+    if cfg.per_persona_memory:
+        from pathlib import Path
+
+        db = Path(cfg.database)
+        derived = db.parent / f"memory_{Path(cfg.persona_file).stem}.db"
+        add("记忆隔离（每卡独立库）", True,
+            f"当前卡使用 {derived}；表情包库 "
+            f"{cfg.sticker.database or 'data/stickers_shared.db'} 共享", warn=True)
+    secrecy = cfg.private_chat.effective_secrecy if cfg.private_chat.enabled else 2
+    if secrecy < 2:
+        add("守口如瓶", True,
+            f"保密等级 {secrecy}：私聊内容可能出现在群聊里", warn=True)
+
+    # 6. 串门关系
+    if cfg.social.visits:
+        from pathlib import Path
+
+        for i, v in enumerate(cfg.social.visits):
             try:
-                t0 = _time.time()
-                client = LLMChatClient(cfg)
-                reply = await client.achat(
-                    [{"role": "user", "content": "只回复两个字：正常"}])
-                report("聊天模型 API", bool(reply.strip()),
-                       f"{cfg.llm.model} · {_time.time() - t0:.1f}s · 回复「{reply.strip()[:20]}」")
-            except Exception as e:
-                report("聊天模型 API", False, f"{type(e).__name__}: {e}")
+                from persona.card import PersonaCard
 
+                gp = PersonaCard.load_yaml(v.persona_file)
+                add(f"串门关系 #{i + 1}（{gp.name}）", True,
+                    f"每 {v.every_hours:g} 小时一次 · 记忆库 {v.database or '与主卡共用'}",
+                    warn=True)
+            except Exception as e:
+                add(f"串门关系 #{i + 1}", False,
+                    f"{v.persona_file} 加载失败：{e}")
+    else:
+        add("串门关系", True, "未配置（到 GUI「设置 · 社交与串门」可添加）", warn=True)
+
+    # 7. NapCat 正向 WS 端口连通（QQ 模式最常见的翻车点）
+    try:
+        from urllib.parse import urlparse
+
+        u = urlparse(cfg.onebot.ws_url)
+        host, port = u.hostname or "127.0.0.1", u.port or 80
+
+        async def _probe():
+            reader, writer = await asyncio.open_connection(host, port)
+            writer.close()
+            await writer.wait_closed()
+
+        await asyncio.wait_for(_probe(), timeout=3)
+        add("NapCat WS 端口", True, f"{host}:{port} 可连通")
+    except Exception as e:
+        add("NapCat WS 端口", True,
+            f"{cfg.onebot.ws_url} 不可达（{type(e).__name__}）——"
+            "仅影响 QQ 模式：确认 NapCat 已启动并在其网络配置里开启了正向 WebSocket",
+            warn=True)
+
+    # 8. 聊天模型 API
+    if mock:
+        add("聊天模型 API", True, "已跳过（离线模式）", warn=True)
+    elif not cfg.llm.api_key:
+        add("聊天模型 API", False,
+            "未配置 api_key（.env 的 DEEPSEEK_API_KEY 或 config.yaml llm.api_key）")
+    else:
+        try:
+            from chat.llm import LLMChatClient
+
+            client = LLMChatClient(cfg)
+            t0 = _time.time()
+            reply = await client.achat(
+                [{"role": "user", "content": "只回复两个字：正常"}])
+            add("聊天模型 API", bool(reply.strip()),
+                f"{cfg.llm.model} · {_time.time() - t0:.1f}s · 回复「{reply.strip()[:20]}」")
+        except Exception as e:
+            add("聊天模型 API", False, f"{type(e).__name__}: {e}")
+
+    # 9. 嵌入 API
+    if mock:
+        add("嵌入 API", True, "已跳过（离线模式）", warn=True)
+    else:
         try:
             if cfg.embedding.provider == "api" and not cfg.embedding.api.api_key:
-                report("嵌入 API", False,
-                       "未配置 api_key（.env 的 SILICONFLOW_API_KEY 或 config.yaml）")
+                add("嵌入 API", False,
+                    "未配置 api_key（.env 的 SILICONFLOW_API_KEY 或 config.yaml）")
             else:
+                from embed.base import create_embedder
+
                 embedder = create_embedder(cfg)
                 vec = (await embedder.embed(["体检"]))[0]
-                report(f"嵌入（{cfg.embedding.provider}）", True,
-                       f"{embedder.name} · dim={len(vec)}")
+                add("嵌入 API", True, f"{embedder.name} · dim={len(vec)}")
         except Exception as e:
-            report("嵌入", False, f"{type(e).__name__}: {e}")
+            add("嵌入 API", False, f"{type(e).__name__}: {e}")
 
-    print(f"结果：{'全部通过，可以启动 ✅' if failures == 0 else f'{failures} 项未通过 ❌'}")
-    return failures
+    # 10. Telegram bot token（配置了才查）
+    if cfg.telegram.bot_token:
+        if mock:
+            add("Telegram bot token", True, "已跳过（离线模式）", warn=True)
+        else:
+            try:
+                import httpx
+
+                async with httpx.AsyncClient(timeout=10) as hc:
+                    resp = await hc.get(
+                        f"https://api.telegram.org/bot{cfg.telegram.bot_token}/getMe")
+                data = resp.json()
+                if data.get("ok"):
+                    add("Telegram bot token", True,
+                        f"@{data['result'].get('username', '?')} 验证通过")
+                else:
+                    add("Telegram bot token", False,
+                        f"getMe 失败：{data.get('description', resp.status_code)}")
+            except Exception as e:
+                add("Telegram bot token", False, f"{type(e).__name__}: {e}")
+
+    return checks
+
+
+async def _cmd_check(cfg, mock: bool) -> int:
+    """启动体检：返回致命问题数（0 = 一切就绪）。"""
+    checks = await run_checks(cfg, mock)
+    for c in checks:
+        mark = "✓" if c["ok"] else ("⚠" if c["warn"] else "✗")
+        suffix = f" —— {c['detail']}" if c["detail"] else ""
+        print(f"  [{mark}] {c['name']}{suffix}")
+    fatal = sum(1 for c in checks if not c["ok"])
+    print(f"结果：{'全部通过，可以启动 ✅' if fatal == 0 else f'{fatal} 项未通过 ❌'}")
+    return fatal
+
+
 
 
 async def _open_stores(cfg) -> tuple["MemoryStore", "MemoryStore | None"]:

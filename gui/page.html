@@ -187,6 +187,7 @@
         <button class="ghost" onclick="doFlush()">立即入库</button>
         <button class="ghost" onclick="doResetWindow()">清空窗口</button>
         <button class="ghost" onclick="doVisit()">👋 串门</button>
+        <button class="ghost" id="btnTrial" onclick="toggleTrial()">🧪 API 试聊</button>
       </div>
       <div class="composer">
         <input type="text" name="sender" id="senderName" value="小明" placeholder="你的名字">
@@ -273,7 +274,9 @@
       <button class="ghost" onclick="testChat()">测试聊天 API</button>
       <button class="ghost" onclick="testEmbed()">测试嵌入 API</button>
       <span id="cfgPath" style="color:var(--dim);font-size:12px"></span>
+      <button class="ghost" onclick="runChecks()">🩺 一键体检</button>
     </div>
+    <div id="checkPanel" class="panel" style="display:none;padding:10px 16px;margin-bottom:16px"></div>
 
     <fieldset><legend>基础</legend>
       <label class="check"><input type="checkbox" id="ppMemory" data-key="PER_PERSONA_MEMORY" data-type="bool">
@@ -474,6 +477,8 @@ async function refreshStatus() {
   mode.textContent = s.mock ? "MOCK 离线" : "API 已连接";
   mode.className = "badge " + (s.mock ? "mode-mock" : "mode-api");
   pb.textContent = "角色：" + s.persona;
+  const trial = $("btnTrial");
+  if (trial) trial.textContent = s.mock ? "🧪 API 试聊" : "↩ 离线模拟";
   $("sideStatus").innerHTML = `
     <div class="kv"><span>模式</span><span>${s.mock ? "离线模拟（规则回复）" : "真实 API"}</span></div>
     <div class="kv"><span>角色</span><span>${s.persona}</span></div>
@@ -821,6 +826,31 @@ async function saveConfig(apply) {
   $("cfgPath").textContent = resp.config_path;
   if (apply) { refreshStatus(); loadPersonas(); loadConfig(); }
   return resp;
+}
+async function runChecks() {
+  toast("体检中…");
+  const resp = await api("/api/check", {});
+  if (!resp.ok) return toast("✗ " + resp.error, "err");
+  const panel = $("checkPanel");
+  panel.style.display = "block";
+  panel.innerHTML = resp.checks.map(c => {
+    const mark = c.ok ? (c.warn ? "⚠" : "✓") : "✗";
+    const color = !c.ok ? "var(--warn)" : (c.warn ? "var(--warn)" : "var(--ok)");
+    return `<div class="kv"><span style="color:${color}">${mark} ${escapeHtml(c.name)}</span>` +
+           `<span style="color:var(--dim);text-align:right;max-width:60%">${escapeHtml(c.detail || "")}</span></div>`;
+  }).join("") +
+  `<div class="tip" style="margin-top:6px">⚠ = 提示（不影响启动）　✗ = 致命问题</div>`;
+  const fatal = resp.fatal;
+  toast(fatal ? `⚠ 体检完成：${fatal} 项未通过（详见下方列表）` : "✓ 体检全部通过",
+        fatal ? "err" : "ok");
+}
+async function toggleTrial() {
+  const s = statusCache || await api("/api/status");
+  toast(s.mock ? "切换到真实 API 中…" : "切回离线模拟中…");
+  const resp = await api("/api/mode", {mock: s.mock});
+  if (!resp.ok) return toast("✗ " + resp.error, "err");
+  await refreshStatus();
+  toast(resp.mock ? "已切回离线模拟" : `✓ 已接入真实 API（角色 ${resp.persona}）——现在聊天就是真模型`, "ok");
 }
 async function testChat() {
   await saveConfig(false);

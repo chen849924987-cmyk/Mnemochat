@@ -74,7 +74,7 @@ python main.py --sim --mock
 # 接真实 API
 python main.py --init            # 生成 config.yaml 与 .env（也可在 GUI「设置」页直接保存生成）
 # 编辑 .env 填入 DEEPSEEK_API_KEY、SILICONFLOW_API_KEY（或其他 OpenAI 兼容端点）
-python main.py --check           # 启动体检：角色卡/数据库/分词/API 连通性
+python main.py --check           # 启动体检：角色卡/数据库完整性/分词/数据目录/NapCat 端口/串门配置/聊天与嵌入 API/TG token
 python main.py --sim
 ```
 
@@ -253,6 +253,9 @@ pyinstaller Mnemochat.spec
   0.18~0.45 注入"（记得大概）+首句"，<0.18 注入"（印象模糊，只记得关键词：…）"——
   人对旧事的记忆本来就是模糊摘要，还省 token；
 - **人保底**：关于具体的人的记忆在召回注入中至少保 3 席，事件细节挤不掉关系；
+- **体检与试聊**：`--check` 和 GUI「🩺 一键体检」同套检查项（10+ 项，含 NapCat 端口连通、
+  TG token 验证、数据库完整性）；聊天页「🧪 API 试聊」一键切真实模型试聊、随时切回；
+  嵌入不可用时召回自动退化为关键词；
 - **来源标注**：每条注入记忆带来源——（群里聊到的）/（别的群里听来的）/
   （你们私下聊的）/（你自己记下的），模型能分辨亲历与转述；
 - **核心记忆钉**：每轮必带"长期在意的人与事"（关系/偏好/关于具体的人），

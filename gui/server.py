@@ -221,6 +221,22 @@ class GUIApp:
                            universe: str = "") -> dict:
         return await self.api_memories_of(universe, stage, q, limit)
 
+    async def api_mode(self, mock: bool) -> dict:
+        """聊天页一键切换 离线模拟/真实 API 试聊：只重建管线，不落盘。"""
+        if not mock and not self.cfg.llm.api_key:
+            return {"ok": False,
+                    "error": "未配置聊天密钥——先到「设置」页填好并保存，再试真实 API"}
+        await self._rebuild(self.cfg, mock)
+        return {"ok": True, "mock": mock, "persona": self.pipeline.persona.name}
+
+    async def api_check(self) -> dict:
+        """运行完整启动体检（与 --check 同一套），返回结构化结果。"""
+        from main import run_checks
+
+        checks = await run_checks(self.cfg, self.mock)
+        return {"ok": True, "checks": checks,
+                "fatal": sum(1 for c in checks if not c["ok"])}
+
     async def api_visit(self, index: int | None) -> dict:
         """手动触发一次串门（缺省选第一条关系）；自动调度共用同一引擎。"""
         from social.visits import perform_visit
@@ -627,6 +643,11 @@ def make_handler(app: GUIApp) -> type[BaseHTTPRequestHandler]:
                     if not text:
                         return self._json({"ok": False, "error": "召回文本为空"}, 400)
                     return self._json(app.bridge.run(app.api_recall(text)))
+                if self.path == "/api/check":
+                    return self._json(app.bridge.run(app.api_check()))
+                if self.path == "/api/mode":
+                    return self._json(app.bridge.run(app.api_mode(
+                        bool(payload.get("mock")))))
                 if self.path == "/api/visit":
                     index = payload.get("index")
                     return self._json(app.bridge.run(app.api_visit(

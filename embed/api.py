@@ -13,7 +13,8 @@ class APIEmbedder:
         self.cfg = cfg
         self.name = f"api:{cfg.model}"
         self.dim = cfg.dim
-        self._client = AsyncOpenAI(base_url=cfg.base_url, api_key=cfg.api_key)
+        self._client = AsyncOpenAI(base_url=cfg.base_url,
+                                   api_key=cfg.api_key or "EMPTY")
 
     async def embed(self, texts: list[str]) -> np.ndarray:
         if not texts:
