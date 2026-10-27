@@ -257,8 +257,11 @@ def _interpolate_env(value):
 
 
 def load_config(path: str | Path = "config.yaml", root: Path | None = None) -> BotConfig:
-    """加载配置。path 相对 root（默认仓库根目录）。"""
-    root = root or Path(__file__).resolve().parent
+    """加载配置。path 相对 root（默认仓库根目录；打包后为 exe 所在目录）。"""
+    if root is None:
+        from util.appdir import base_dir
+
+        root = base_dir()
     load_dotenv(root / ".env")
 
     cfg_path = Path(path)

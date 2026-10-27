@@ -21,7 +21,26 @@ import shutil
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent
+from util.appdir import base_dir, is_frozen, resource_dir
+
+ROOT = base_dir()   # 源码运行=仓库根；打包成 exe 后=exe 所在目录（用户数据根）
+
+
+def _seed_user_files() -> None:
+    """打包模式下首次运行：把随包附带的 persona 模板与示例配置播种到 exe 目录。"""
+    if not is_frozen():
+        return
+    res = resource_dir()
+    for name in ("personas", "docs"):
+        src, dst = res / name, ROOT / name
+        if src.is_dir() and not dst.exists():
+            shutil.copytree(src, dst)
+            print(f"[初始化] 已生成 {dst}")
+    for name in ("config.example.yaml", ".env.example"):
+        src, dst = res / name, ROOT / name
+        if src.exists() and not dst.exists():
+            shutil.copy(src, dst)
+            print(f"[初始化] 已生成 {dst}")
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -104,6 +123,14 @@ async def _cmd_reembed(cfg) -> None:
 def main() -> None:
     if sys.stdout and hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")  # Windows 控制台中文兜底
+    if is_frozen():
+        # 双击 exe 即启动图形控制台（显式传参时仍可 --sim / --onebot 等）
+        if len(sys.argv) <= 1:
+            sys.argv += ["--gui"]
+        _seed_user_files()
+        import os
+
+        os.chdir(ROOT)   # database 等相对路径统一落在 exe 目录，与启动方式无关
     args = _build_parser().parse_args()
 
     if args.init:

@@ -48,7 +48,9 @@ class PersonaCard(BaseModel):
     def load_yaml(cls, path: str | Path) -> "PersonaCard":
         p = Path(path)
         if not p.is_absolute():
-            p = Path(__file__).resolve().parent.parent / p
+            from util.appdir import base_dir
+
+            p = base_dir() / p   # 源码运行=仓库根；打包后=exe 目录（用户数据根）
         with open(p, encoding="utf-8") as f:
             data = yaml.safe_load(f) or {}
         return cls.model_validate(data)
