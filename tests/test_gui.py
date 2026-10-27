@@ -331,3 +331,23 @@ def test_visit_qq_top_account_sender(app, tmp_path):
         assert not any("data/evil" in t for _, t in sent)
     finally:
         app.pipeline.social_sender = None
+
+
+def test_universes_cover_all_personas(app, tmp_path):
+    """记忆宇宙覆盖 personas/ 下全部角色卡：隔离开启时各卡派生独立库。"""
+    app.cfg.per_persona_memory = True
+    app.cfg.database = str(tmp_path / "memory_default.db")
+    app.cfg.persona_file = "personas/default.yaml"   # 主卡也用 personas/ 内的卡
+    try:
+        uni = _get(app.port, "/api/universes")
+        paths = {u["path"] for u in uni["items"]}
+        assert any("memory_default" in p for p in paths)          # 主卡
+        assert any("memory_dafeiyu" in p for p in paths)          # 大肥鱼
+        assert any("memory_deepseek_whale" in p for p in paths)   # 小鲸鱼
+        ps = _get(app.port, "/api/personas")
+        assert ps["ok"]
+        assert all("is_active" in p and "db" in p for p in ps["items"])
+        active = [p for p in ps["items"] if p["is_active"]]
+        assert len(active) == 1 and active[0]["name"] == "小满"
+    finally:
+        app.cfg.per_persona_memory = False

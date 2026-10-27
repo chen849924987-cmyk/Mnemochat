@@ -341,15 +341,19 @@ class GUIApp:
     # ---------- 人格卡 ----------
 
     def api_personas(self) -> dict:
+        active = str(Path(self._resolve(self.cfg.persona_file)))
         out = []
         for p in sorted((self.root / "personas").glob("*.yaml")):
             try:
                 name = (load_persona(p) or {}).get("name") or p.stem
             except Exception:
                 name = p.stem
-            out.append({"file": f"personas/{p.name}", "name": name})
+            out.append({"file": f"personas/{p.name}", "name": name,
+                        "is_active": Path(self._resolve(f"personas/{p.name}")) == Path(active),
+                        "db": self._persona_db_path(f"personas/{p.name}")})
         return {"ok": True, "items": out,
-                "current": str(self.editor_state.card_path)}
+                "current": str(self.editor_state.card_path),
+                "per_persona_memory": self.cfg.per_persona_memory}
 
     def api_persona_select(self, path: str) -> dict:
         card = self._resolve(path)
@@ -363,20 +367,38 @@ class GUIApp:
         self.editor_state = EditorState(card)
         return {"ok": True, "path": str(card), "persona": data}
 
-    # ---------- 多记忆宇宙（主卡 + 串门客卡） ----------
+    # ---------- 多记忆宇宙（全部角色卡 + 串门客卡显式库） ----------
+
+    def _persona_db_path(self, persona_file: str) -> str:
+        """一张卡在当前配置下使用的记忆库路径（与 per_persona_memory 派生规则一致）。"""
+        if self.cfg.per_persona_memory:
+            db = Path(self.cfg.database)
+            return str(db.parent / f"memory_{Path(persona_file).stem}.db")
+        return str(Path(self.cfg.database))
 
     def _universe_defs(self) -> list[tuple[str, str]]:
-        """[(标签, 记忆库路径)]：主卡 + 各串门客卡（去重）。"""
+        """[(标签, 记忆库路径)]：主卡 + personas/ 下全部角色卡 + 串门客卡显式库。
+
+        未开启记忆隔离时所有卡派生到同一个库，去重后自然合并为一条。"""
         entries = [(f"{self.pipeline.persona.name}（当前主卡）",
                     str(Path(self.cfg.database)))]
+        active_file = str(Path(self._resolve(self.cfg.persona_file)))
+        for p in sorted((self.root / "personas").glob("*.yaml")):
+            if Path(self._resolve(str(p))) == Path(active_file):
+                continue   # 主卡已在上面
+            try:
+                name = (load_persona(p) or {}).get("name") or p.stem
+            except Exception:
+                name = p.stem
+            entries.append((name, self._persona_db_path(f"personas/{p.name}")))
         for v in self.cfg.social.visits:
-            path = str(Path(v.database or self.cfg.database))
+            path = str(Path(v.database or self._persona_db_path(v.persona_file)))
             try:
                 name = (load_persona(self._resolve(v.persona_file)) or {}).get(
                     "name") or Path(v.persona_file).stem
             except Exception:
                 name = Path(v.persona_file).stem
-            entries.append((name, path))
+            entries.append((f"{name}（串门客卡）", path))
         seen: set[str] = set()
         out = []
         for label, path in entries:

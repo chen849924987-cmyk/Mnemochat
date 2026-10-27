@@ -144,6 +144,17 @@
   input:disabled, select:disabled { opacity:.4; }
   .visit-row { display:grid; grid-template-columns: 1fr 1fr 90px auto auto;
                gap:8px; align-items:center; margin-bottom:6px; }
+  .persona-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(170px,1fr));
+                  gap:8px; margin-top:2px; }
+  .persona-card { border:1px solid var(--line); border-radius:10px; padding:8px 10px;
+                  cursor:pointer; background:var(--panel2); }
+  .persona-card:hover { border-color:var(--acc2); }
+  .persona-card.sel { border-color:var(--acc); box-shadow:0 0 0 1px var(--acc); }
+  .persona-card b { display:block; font-size:13px; }
+  .persona-card .f { color:var(--dim); font-size:11px; word-break:break-all;
+                     display:block; margin:2px 0 6px; }
+  .persona-card .use { width:100%; font-size:11px; padding:3px 0; }
+  .persona-card .use.on { color:var(--ok); border-color:var(--ok); }
   @media (max-width:1000px){ .chat-grid{grid-template-columns:1fr;height:auto}
     .grid2,.grid4{grid-template-columns:1fr} }
 </style>
@@ -203,8 +214,7 @@
     <button class="ghost" onclick="loadUniverses()">刷新</button>
     <span id="stickerInfo" style="color:var(--dim);font-size:12px"></span>
   </div>
-  <p class="tip" style="margin-bottom:10px">主卡和串门客卡各有独立的记忆宇宙（每卡隔离时）；
-    切换查看不同宇宙，串门经历记在客人自己的宇宙里。召回预演只对当前运行中的主卡生效。</p>
+  <p class="tip" id="uniHint" style="margin-bottom:10px"></p>
   <div class="stats" id="memStats"></div>
   <div class="mem-controls">
     <select id="memStage">
@@ -269,8 +279,9 @@
       <label class="check"><input type="checkbox" id="ppMemory" data-key="PER_PERSONA_MEMORY" data-type="bool">
         每张角色卡独立记忆库（记忆互不相通；表情包库自动共享为 data/stickers_shared.db）</label>
       <div class="grid2">
-        <div><label>角色卡（机器人用哪张卡聊天）</label>
-          <input type="text" data-key="PERSONA_FILE" list="personaList">
+        <div><label>角色卡（点击选择 · ⚡启用 = 保存并立即热切换）</label>
+          <input type="hidden" data-key="PERSONA_FILE">
+          <div id="personaGrid" class="persona-grid"></div>
           <datalist id="personaList"></datalist></div>
         <div class="row"><div><label id="dbLabel">数据库文件<span class="vishint">（开启隔离后自动 data/memory_&lt;卡名&gt;.db）</span></label>
             <input type="text" data-key="DATABASE"></div>
@@ -567,6 +578,10 @@ async function loadUniverses() {
   if (cur) sel.value = cur;
   $("stickerInfo").textContent = resp.stickers
     ? `共享表情包库：${resp.stickers.total} 张（已打标 ${resp.stickers.tagged}）` : "";
+  const s = statusCache || await api("/api/status");
+  $("uniHint").textContent = s.per_persona_memory
+    ? "每张角色卡有独立的记忆宇宙（每卡隔离已开启）；切换查看各自的记忆。召回预演只对当前运行中的主卡生效。"
+    : "当前未开启「每张角色卡独立记忆库」——所有卡共用同一个记忆库。到「设置」页勾选开启后，这里会按卡分列各自的记忆宇宙。";
   loadMemories();
 }
 function currentUniverse() {
@@ -578,6 +593,11 @@ async function loadStats() { /* 并入 loadUniverses */ }
 async function loadMemories() {
   const stage = $("memStage").value, q = $("memSearch").value.trim();
   const universe = $("universeSel").value;
+  const u = currentUniverse();
+  if (u && u.exists === false) {
+    $("memBody").innerHTML = `<tr><td colspan="11" style="color:var(--dim)">（「${escapeHtml(u.label)}」的记忆宇宙还没生成——到设置页启用这张卡并聊几句后出现）</td></tr>`;
+    return;
+  }
   const resp = await api(`/api/memories?stage=${stage}&q=${encodeURIComponent(q)}` +
                          `&universe=${encodeURIComponent(universe)}`);
   if (!resp.ok) { $("memBody").innerHTML = ""; return toast(resp.error, "err"); }
@@ -626,9 +646,11 @@ async function wipeUniverse() {
 }
 
 /* ---------- 人格 ---------- */
+let PERSONAS = [];
 async function loadPersonas() {
   const resp = await api("/api/personas");
   if (!resp.ok) return;
+  PERSONAS = resp.items;
   const sel = $("cardSel");
   sel.innerHTML = resp.items.map(p =>
     `<option value="${p.file}">${p.name}（${p.file}）</option>`).join("");
@@ -637,6 +659,45 @@ async function loadPersonas() {
     if (cur.endsWith(opt.value)) { sel.value = opt.value; break; }
   $("personaList").innerHTML = resp.items.map(p =>
     `<option value="${p.file}">${p.name}</option>`).join("");
+  renderPersonaGrid();
+}
+function renderPersonaGrid() {
+  const grid = $("personaGrid");
+  if (!grid || !PERSONAS.length) return;
+  const norm = s => String(s || "").replace(/\\/g, "/").toLowerCase();
+  const el = document.querySelector('[data-key="PERSONA_FILE"]');
+  const cur = norm(el ? el.value : "");
+  grid.innerHTML = "";
+  PERSONAS.forEach(p => {
+    const isFormSel = norm(p.file) === cur;
+    const card = document.createElement("div");
+    card.className = "persona-card" + (isFormSel ? " sel" : "");
+    card.innerHTML = `<b>${escapeHtml(p.name)}${p.is_active
+      ? ' <span style="color:var(--ok)" title="运行中">●</span>' : ""}</b>
+      <span class="f">${escapeHtml(p.file)}</span>
+      <button class="ghost use ${p.is_active ? "on" : ""}">${p.is_active ? "✓ 使用中" : "⚡ 启用"}</button>`;
+    card.onclick = () => {
+      el.value = p.file;
+      renderPersonaGrid();
+    };
+    card.querySelector(".use").onclick = (e) => {
+      e.stopPropagation();
+      if (p.is_active) return toast("该卡已在运行中", "ok");
+      applyPersona(p.file);
+    };
+    grid.appendChild(card);
+  });
+}
+async function applyPersona(file) {
+  const mode = document.querySelector('input[name=mode]:checked').value;
+  toast("切换角色卡中…");
+  const resp = await api("/api/config", {values: {PERSONA_FILE: file}, mode, apply: true});
+  if (!resp.ok) return toast("✗ " + resp.error, "err");
+  toast(`✓ 已切换到「${resp.persona}」并热重载`, "ok");
+  await refreshStatus();
+  await loadConfig();
+  await loadPersonas();
+  if (!$("tab-memory").hidden) loadUniverses();
 }
 $("cardSel").addEventListener("change", async e => {
   const resp = await api("/api/persona_select", {path: e.target.value});
@@ -667,6 +728,7 @@ async function loadConfig() {
   syncVisionFields();
   syncIsolationFields();
   renderVisits();
+  renderPersonaGrid();
 }
 function syncVisionFields() {
   const box = document.getElementById("visionUseChat");
