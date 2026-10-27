@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any
 from config import BotConfig
 from memory import decay
 from memory.models import MemoryRecord, MessageRecord
+from persona.guard import source_label
 from util.text import fmt_relative, fts_query
 
 if TYPE_CHECKING:
@@ -84,9 +85,10 @@ class Recaller:
         bm25_raw = dict(await self.store.bm25_search(fts_query(query_text), rcfg.bm25_candidates))
         # 2) 向量语义召回
         qvec = (await self.embedder.embed([query_text]))[0]
+        # 候选池不按群圈定：global / cross_group / 私聊的记忆也要能被召回，
+        # 隐私与边界统一交给下方 persona.allows + 守口如瓶过滤（单一执行点）
         vec_sims = dict(
-            await self.store.vector_topk(self.embedder.name, qvec, rcfg.vector_candidates,
-                                         group_id=group_id)
+            await self.store.vector_topk(self.embedder.name, qvec, rcfg.vector_candidates)
         )
         # 3) 实体图一跳邻居
         names = await self.store.entity_names(group_id)
@@ -229,5 +231,7 @@ class Recaller:
             when = fmt_relative(m.anchor_ts, now)
             tag = {"bond": "关系", "preference": "偏好"}.get(m.kind, "")
             who = f"关于{m.subject_user_id}：" if m.subject_user_id else ""
-            lines.append(f"- {who}{m.content}（{tag or '要紧事'}，{when}起就在心上）")
+            label = source_label(m, group_id)
+            tail = f" · {label}" if label else ""
+            lines.append(f"- {who}{m.content}（{tag or '要紧事'}，{when}起就在心上{tail}）")
         return "\n".join(lines)

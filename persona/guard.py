@@ -22,7 +22,23 @@ DEFAULT_STANCE = """把这些回忆当作你自己的记忆自然使用：
 - 不确定时不要假装记得，更不要编造记忆"""
 
 
-def render_memory_block(recall: "RecallResult", persona: "PersonaCard", now: float) -> str:
+def source_label(mem, group_id: str) -> str:
+    """记忆的来源标注（拟人：人会说"亲耳听的"还是"哪里听来的"）。"
+
+    不带括号，调用方自行包裹；group_id 为空时不标注。"""
+    if not group_id:
+        return ""
+    if mem.visibility == "self":
+        return "你自己记下的"
+    if mem.group_id.startswith("private:"):
+        return "你们私下聊的" if mem.group_id == group_id else "私下听来的"
+    if mem.group_id == group_id:
+        return "群里聊到的"
+    return "别的群里听来的"
+
+
+def render_memory_block(recall: "RecallResult", persona: "PersonaCard",
+                        now: float, group_id: str = "") -> str:
     if not recall:
         return ""
     stance = (persona.memory_stance or DEFAULT_STANCE).strip()
@@ -31,7 +47,9 @@ def render_memory_block(recall: "RecallResult", persona: "PersonaCard", now: flo
         mem = item.memory
         when = fmt_relative(mem.anchor_ts, now)
         text = getattr(item, "display", None) or mem.content
-        lines.append(f"- {when}，{text}")
+        label = source_label(mem, group_id)
+        suffix = f"（{label}）" if label else ""
+        lines.append(f"- {when}，{text}{suffix}")
     return f"【记忆使用准则】\n{stance}\n\n" + "\n".join(lines)
 
 
@@ -39,7 +57,7 @@ def build_reply_system(persona: "PersonaCard", recall: "RecallResult",
                        group_id: str, now: float,
                        extra_hint: str = "") -> str:
     system = persona.build_system_prompt(group_id, now)
-    block = render_memory_block(recall, persona, now)
+    block = render_memory_block(recall, persona, now, group_id)
     if block:
         system = f"{system}\n\n{block}"
     if extra_hint:

@@ -467,7 +467,8 @@ class GUIApp:
             ret = decay.retention((now - m.anchor_ts) / 86400.0, m.strength)
             out.append({"id": m.id, "stage": m.stage, "kind": m.kind,
                         "status": m.status, "content": m.content,
-                        "subject": m.subject_user_id,
+                        "subject": m.subject_user_id, "actor": m.actor_user_id,
+                        "group_id": m.group_id,
                         "importance": m.importance, "emotion": m.emotion,
                         "retention": round(ret, 3), "strength": round(m.strength, 1),
                         "access": m.access_count, "recurrence": m.recurrence_count,

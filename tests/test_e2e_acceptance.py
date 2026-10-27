@@ -102,3 +102,67 @@ async def test_provider_switch_preserves_old_vectors(store, embedder, seed_memor
     # stats 中两个模型并存
     stats = await store.stats()
     assert set(stats["embeddings"]) == {embedder.name, other.name}
+
+
+async def test_recognize_person_after_window_reset(
+    store, chat, embedder, cfg, clock, persona
+):
+    """验收：清会话后仍认对人——『还记得我是谁吗』答得出身份与关键事实。"""
+    pipe = BotPipeline(store, chat, embedder, persona, cfg, clock)
+    await pipe.on_user_message(
+        "g1", "小红", "小红", "我叫小红，我对芒果过敏", force_reply=True
+    )
+    await pipe.flush_ingest()
+    clock.warp(14 * 86400)
+    await pipe.consolidate_now()
+    pipe.reset_window("g1")
+
+    reply = await pipe.on_user_message(
+        "g1", "小红", "小红", "还记得我是谁吗？我对什么要注意？", force_reply=True
+    )
+    system = chat.last_chat_messages[0]["content"]
+    assert "小红" in system and "芒果" in system
+    assert "芒果" in reply
+
+
+async def test_indirect_recall_via_attribute(
+    store, chat, embedder, cfg, clock, persona
+):
+    """验收：间接召回——不提关键词全文，只提相关属性（船的名字）也能召回。
+
+    离线用名字做桥（真嵌入 API 下『贵不贵』这类纯语义关联也能命中）。"""
+    pipe = BotPipeline(store, chat, embedder, persona, cfg, clock)
+    await pipe.on_user_message(
+        "g1", "小明", "小明", "我养了一只黑珍珠号", force_reply=True
+    )
+    await pipe.flush_ingest()
+    clock.warp(14 * 86400)
+    await pipe.consolidate_now()
+    pipe.reset_window("g1")
+
+    await pipe.on_user_message(
+        "g1", "小明", "小明", "那艘黑珍珠号最近怎么样？", force_reply=True
+    )
+    system = chat.last_chat_messages[0]["content"]
+    assert "黑珍珠号" in system
+
+
+async def test_source_labels_distinct(
+    store, chat, embedder, cfg, clock, persona, seed_memory
+):
+    """验收：来源可区分——同群/别群/私聊的记忆注入时带不同来源标注。"""
+    pipe = BotPipeline(store, chat, embedder, persona, cfg, clock)
+
+    await seed_memory("群里的老话题", group_id="g1")
+    await seed_memory("别的群里流传的梗", group_id="g2", visibility="global")
+    await seed_memory("私下才说的心事", group_id="private:10001")
+    cfg.private_chat.secrecy_level = 0   # 口无遮拦档才会注入他群私聊记忆
+
+    await pipe.on_user_message(
+        "g1", "小明", "小明", "说说老话题、那个梗，还有点心事", force_reply=True
+    )
+    await pipe.flush_ingest()
+    system = chat.last_chat_messages[0]["content"]
+    assert "（群里聊到的）" in system
+    assert "（别的群里听来的）" in system
+    assert "（私下听来的）" in system

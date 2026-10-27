@@ -228,7 +228,7 @@
   <div class="panel" style="padding:6px 10px;overflow:auto;max-height:40vh;margin-bottom:16px">
     <table>
       <thead><tr><th>id</th><th>阶段</th><th>类型</th><th>内容</th><th>重要</th>
-        <th>保留率 R</th><th>S(天)</th><th>召回</th><th>复现</th><th>状态</th><th>时间</th></tr></thead>
+        <th>保留率 R</th><th>S(天)</th><th>召回</th><th>复现</th><th>状态</th><th>来源</th><th>时间</th></tr></thead>
       <tbody id="memBody"></tbody>
     </table>
   </div>
@@ -610,7 +610,7 @@ async function loadMemories() {
   const universe = $("universeSel").value;
   const u = currentUniverse();
   if (u && u.exists === false) {
-    $("memBody").innerHTML = `<tr><td colspan="11" style="color:var(--dim)">（「${escapeHtml(u.label)}」的记忆宇宙还没生成——到设置页启用这张卡并聊几句后出现）</td></tr>`;
+    $("memBody").innerHTML = `<tr><td colspan="12" style="color:var(--dim)">（「${escapeHtml(u.label)}」的记忆宇宙还没生成——到设置页启用这张卡并聊几句后出现）</td></tr>`;
     return;
   }
   const resp = await api(`/api/memories?stage=${stage}&q=${encodeURIComponent(q)}` +
@@ -626,6 +626,7 @@ async function loadMemories() {
       <td><span class="retbar" style="width:${Math.max(2, pct/5)}px;background:${retColor}"></span>${pct}%</td>
       <td>${m.strength}</td><td>${m.access}</td><td>${m.recurrence}</td>
       <td class="${m.status !== "active" ? "st-" + m.status : ""}">${m.status}</td>
+      <td title="${escapeHtml(m.group_id || "")}">${escapeHtml(m.actor || "—")}</td>
       <td style="white-space:nowrap">${fmtDate(m.created_at)}</td></tr>`;
   }).join("") || `<tr><td colspan="11" style="color:var(--dim)">（空）聊几句、或点「立即入库」试试</td></tr>`;
 }
