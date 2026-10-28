@@ -71,6 +71,7 @@ class BotPipeline:
         self._window_reset_ts: dict[str, float] = {}
         self._tasks: set[asyncio.Task] = set()
         self.last_ingest_result: IngestResult | None = None
+        self.last_ingest_error: str | None = None   # 最近一次入库失败原因（GUI 可见）
         self.last_consolidation_result: ConsolidationResult | None = None
         self.last_drift_report: DriftReport | None = None
         self.last_stickers_pruned: int = 0   # 每轮遗忘清理的表情包数
@@ -212,7 +213,9 @@ class BotPipeline:
     async def _ingest_safe(self, msgs: list[MessageRecord]) -> None:
         try:
             self.last_ingest_result = await self.ingestor.ingest_messages(msgs)
-        except Exception:
+            self.last_ingest_error = None
+        except Exception as e:
+            self.last_ingest_error = f"{type(e).__name__}: {e}"
             log.exception("ingest 任务失败")
 
     async def flush_ingest(self) -> IngestResult | None:

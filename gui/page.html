@@ -571,7 +571,12 @@ async function doConsolidate() {
 }
 async function doFlush() {
   const resp = await api("/api/flush");
-  addMsg("evt", "", "📥 已处理未入库消息");
+  if (resp.ingest_error) {
+    addMsg("evt", "", "⚠ 入库时提取调用失败（本次内容未记住）：" + resp.ingest_error);
+    toast("⚠ 入库失败：" + resp.ingest_error, "err");
+  } else {
+    addMsg("evt", "", "📥 已处理未入库消息");
+  }
   addEvents(resp.events); refreshStatus();
 }
 async function doResetWindow() {

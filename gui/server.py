@@ -197,7 +197,8 @@ class GUIApp:
 
     async def api_flush(self) -> dict:
         await self.pipeline.flush_ingest()
-        return {"ok": True, "events": self._ingest_events()}
+        return {"ok": True, "events": self._ingest_events(),
+                "ingest_error": self.pipeline.last_ingest_error}
 
     async def api_recall(self, text: str) -> dict:
         from memory.models import MessageRecord
