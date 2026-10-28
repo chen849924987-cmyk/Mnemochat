@@ -27,6 +27,11 @@
   程序文件（exe、_internal）与用户文件（config.yaml/.env/personas/data）分离同步，
   修复此前 PyInstaller 整目录重建导致已保存配置被清空的问题。
 
+### 变更
+- 聊天/提取模型的默认输出上限由 1024/2048 提升至 8192
+  （输出上限非目标、按实际输出计费；群聊回复依旧很短），
+  DeepSeek 4.1 Flash 最大 384K 输出可在 GUI 自行填写。
+
 ### 修复
 - **召回候选池按群圈定**：向量候选此前只在当前群内检索，
   导致 `visibility: global` 与 `cross_group` 的跨群记忆完全无法被召回

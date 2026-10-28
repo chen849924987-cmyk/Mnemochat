@@ -26,12 +26,14 @@ class LLMConfig(BaseModel):
     api_key: str = ""
     model: str = "deepseek-chat"
     temperature: float = 0.8
-    max_tokens: int = 1024
+    # 输出上限（非目标）：群聊回复通常几十 token 就结束了；调大是为
+    # 总结/长分析等场景留空间。按实际输出计费，设多大都不多花钱。
+    max_tokens: int = 8192
 
 
 class ExtractorConfig(LLMConfig):
     temperature: float = 0.2
-    max_tokens: int = 2048
+    max_tokens: int = 8192
 
 
 class EmbedAPIConfig(BaseModel):

@@ -15,7 +15,7 @@ llm:
   api_key: ${DEEPSEEK_API_KEY}
   model: deepseek-chat
   temperature: 0.8
-  max_tokens: 1024
+  max_tokens: 8192    # 输出上限（非目标）：群聊回复几十 token 就结束；给总结/长分析留空间
 
 # ---------- 提取模型（记忆提取/巩固用，可用便宜模型） ----------
 extractor:
@@ -23,7 +23,7 @@ extractor:
   api_key: ${DEEPSEEK_API_KEY}
   model: deepseek-chat
   temperature: 0.2
-  max_tokens: 2048
+  max_tokens: 8192
 
 # ---------- 嵌入（provider: api | local，切换后运行 --reembed 补齐旧向量） ----------
 embedding:
