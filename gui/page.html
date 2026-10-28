@@ -533,7 +533,8 @@ async function send() {
   $("chatInput").value = "";
   try {
     const resp = await api("/api/chat", {name, text, force: $("forceAt").checked});
-    if (resp.reply) { addMsg("bot", resp.persona, resp.reply); }
+    if (!resp.ok) { addMsg("evt", "", "⚠ 发送失败：" + (resp.error || "未知错误")); }
+    else if (resp.reply) { addMsg("bot", resp.persona, resp.reply); }
     else if (resp.interest) { showInterest(resp.interest); }
     addEvents(resp.events);
   } catch (e) { addMsg("evt", "", "⚠ 发送失败：" + e); }
@@ -845,9 +846,10 @@ async function runChecks() {
         fatal ? "err" : "ok");
 }
 async function toggleTrial() {
-  const s = statusCache || await api("/api/status");
-  toast(s.mock ? "切换到真实 API 中…" : "切回离线模拟中…");
-  const resp = await api("/api/mode", {mock: s.mock});
+  const s = await api("/api/status");       // 取实时状态，别信缓存
+  const toMock = !s.mock;                   // 目标 = 当前状态取反
+  toast(toMock ? "切回离线模拟中…" : "接入真实 API 中…");
+  const resp = await api("/api/mode", {mock: toMock});
   if (!resp.ok) return toast("✗ " + resp.error, "err");
   await refreshStatus();
   toast(resp.mock ? "已切回离线模拟" : `✓ 已接入真实 API（角色 ${resp.persona}）——现在聊天就是真模型`, "ok");
