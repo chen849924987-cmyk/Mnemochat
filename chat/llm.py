@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any, Protocol
 
@@ -20,6 +21,7 @@ log = logging.getLogger(__name__)
 
 class ChatBackend(Protocol):
     async def achat(self, messages: list[dict[str, str]], *, json_mode: bool = False) -> str: ...
+    last_reasoning: str
     async def extract_json(self, system: str, user: str) -> dict[str, Any]: ...
 
 
@@ -38,6 +40,7 @@ class LLMChatClient:
             max_retries=3,
             timeout=120.0,
         )
+        self.last_reasoning = ""
         self.usage = {"chat_prompt": 0, "chat_completion": 0,
                       "extract_prompt": 0, "extract_completion": 0}
 
@@ -48,13 +51,22 @@ class LLMChatClient:
             temperature=self.cfg.llm.temperature,
             max_tokens=self.cfg.llm.max_tokens,
         )
+        if self.cfg.llm.extra_body_json:
+            try:
+                kwargs["extra_body"] = json.loads(self.cfg.llm.extra_body_json)
+            except json.JSONDecodeError:
+                log.warning("llm.extra_body_json 不是合法 JSON，已忽略")
         if json_mode:
             kwargs["response_format"] = {"type": "json_object"}
         resp = await self._chat.chat.completions.create(**kwargs)
         if resp.usage:
             self.usage["chat_prompt"] += resp.usage.prompt_tokens
             self.usage["chat_completion"] += resp.usage.completion_tokens
-        return resp.choices[0].message.content or ""
+        msg = resp.choices[0].message
+        reasoning = (getattr(msg, "reasoning_content", None)
+                     or getattr(msg, "reasoning", None) or "")
+        self.last_reasoning = reasoning.strip()
+        return msg.content or ""
 
     async def extract_json(self, system: str, user: str) -> dict[str, Any]:
         messages = [

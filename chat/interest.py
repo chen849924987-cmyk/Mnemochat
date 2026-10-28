@@ -55,6 +55,16 @@ class InterestScorer:
         if content.rstrip().endswith(("?", "？")):
             factors["问句"] = b.interest_question_bonus
 
+        # 话题延续：热聊中的跟话/追问优先接——真人不会无视正在进行的对话
+        try:
+            recent = await self.store.recent_messages(group_id, 2)
+        except Exception:
+            recent = []
+        if (len(recent) >= 2
+                and (self.clock.now() - recent[-2].ts)
+                <= b.interest_followup_seconds):
+            factors["跟话"] = b.interest_followup_bonus
+
         hits = [k for k in persona.interests if k and k in content]
         if hits:
             factors["兴趣"] = min(40.0, 20.0 * len(hits))

@@ -29,7 +29,10 @@ class LLMConfig(BaseModel):
     # 输出上限（非目标）：群聊回复通常几十 token 就结束了；调大是为
     # 总结/长分析等场景留空间。按实际输出计费，设多大都不多花钱。
     max_tokens: int = 8192
-
+    # 额外请求体（JSON 字符串）：思考开关等厂商私有参数透传，
+    # 例：硅基流动 {"enable_thinking": true}；
+    # 模型返回的思维链自动捕获，GUI 聊天页可查看
+    extra_body_json: str = ""
 
 class ExtractorConfig(LLMConfig):
     temperature: float = 0.2
@@ -134,6 +137,8 @@ class BehaviorConfig(BaseModel):
     interest_memory_bonus: float = 25       # 提到机器人记得的人/事
     interest_jitter: float = 15             # 情绪抖动上限（时接时不接）
     interest_min_length: int = 6            # 过短消息（哈哈/6）不构成话题
+    interest_followup_seconds: float = 90   # 热聊窗口：N 秒内的跟话算"话题延续"
+    interest_followup_bonus: float = 25     # 跟话加成分（真人不会无视正在进行的对话；0=关闭）
 
 
 class WindowConfig(BaseModel):

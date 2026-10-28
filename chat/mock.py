@@ -26,6 +26,7 @@ class MockChatClient:
     def __init__(self) -> None:
         self.last_chat_messages: list[dict[str, str]] = []
         self.last_extract_input: str = ""
+        self.last_reasoning = ""   # 与真实客户端属性对齐（mock 无思维链）
 
     async def achat(self, messages: list[dict[str, str]], *, json_mode: bool = False) -> str:
         self.last_chat_messages = messages

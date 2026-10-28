@@ -46,8 +46,12 @@ async def test_cooldown_kills_mood(store, cfg, clock, persona):
 
 
 async def test_pipeline_interest_flow(store, chat, embedder, cfg, clock, persona):
-    """整合：兴趣高→插话；冷却→潜水；@→必回不受影响。"""
+    """整合：兴趣高→插话；冷却→潜水；@→必回不受影响。
+
+    （关闭跟话加成以单测冷却本身；热聊跟话压过冷却是新语义，
+      见 test_followup_in_hot_conversation。）"""
     cfg.behavior.reply_probability = 0.0
+    cfg.behavior.interest_followup_bonus = 0
     persona.interests = ["量子物理"]
     pipe = BotPipeline(store, chat, embedder, persona, cfg, clock)
 
@@ -64,3 +68,30 @@ async def test_pipeline_interest_flow(store, chat, embedder, cfg, clock, persona
     # @必回优先级最高，不受冷却影响
     r3 = await pipe.on_user_message("g1", "小明", "小明", f"@{persona.name} 在吗")
     assert r3 is not None
+
+
+async def test_followup_in_hot_conversation(store, cfg, clock, persona):
+    """话题延续：热聊中的跟话/追问拿"跟话"加成——真人不会无视正在进行的对话。"""
+    persona.interests = []
+    s = _scorer(store, cfg, clock, seed=11)
+    now = clock.now()
+    await store.add_message("g1", "小明", "小明", "今天钓了条石斑鱼，晚上清蒸", now)
+    await store.add_message("g1", "小明", "小明", "它的刺多吗？好不好处理？", now + 5)
+
+    v = await s.score("g1", "它的刺多吗？好不好处理？", persona)
+    assert v.factors.get("跟话") == cfg.behavior.interest_followup_bonus
+    assert v.will_reply                      # 话题10+问句20+跟话25 = 55 ≥ 45
+
+
+async def test_no_followup_bonus_in_cold_conversation(store, cfg, clock, persona):
+    """冷场 5 分钟后的同款问句：没有跟话加成，是否回复交回兴趣评分本身。"""
+    persona.interests = []
+    s = _scorer(store, cfg, clock, seed=12)
+    now = clock.now()
+    await store.add_message("g1", "小明", "小明", "今天钓了条石斑鱼，晚上清蒸",
+                            now - 300)
+    await store.add_message("g1", "小明", "小明", "它的刺多吗？好不好处理？", now)
+
+    v = await s.score("g1", "它的刺多吗？好不好处理？", persona)
+    assert "跟话" not in v.factors
+    assert not v.will_reply                  # 话题10+问句20+抖动 < 45

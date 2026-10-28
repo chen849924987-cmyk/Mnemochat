@@ -72,6 +72,7 @@ class BotPipeline:
         self._tasks: set[asyncio.Task] = set()
         self.last_ingest_result: IngestResult | None = None
         self.last_ingest_error: str | None = None   # 最近一次入库失败原因（GUI 可见）
+        self.last_reasoning: str = ""              # 最近一次回复的思维链（如有）
         self.last_consolidation_result: ConsolidationResult | None = None
         self.last_drift_report: DriftReport | None = None
         self.last_stickers_pruned: int = 0   # 每轮遗忘清理的表情包数
@@ -177,6 +178,7 @@ class BotPipeline:
             {"role": "system", "content": system},
             {"role": "user", "content": user},
         ])
+        self.last_reasoning = getattr(self.chat, "last_reasoning", "")
 
         # 机器人自己的发言也入日志与 ingest 缓冲（约定、互动都是记忆）
         ts = self.clock.now()

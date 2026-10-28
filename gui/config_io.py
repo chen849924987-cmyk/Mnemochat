@@ -44,6 +44,8 @@ llm:
   model: @@CHAT_MODEL@@
   temperature: @@CHAT_TEMPERATURE@@
   max_tokens: @@CHAT_MAX_TOKENS@@
+  # 厂商私有参数透传（JSON）：如 {"enable_thinking": true} 开思考；思维链自动捕获
+  extra_body_json: @@LLM_EXTRA_BODY@@
 
 # ---------- 提取模型（记忆提取/巩固用，可用便宜模型） ----------
 extractor:
@@ -123,6 +125,8 @@ behavior:
   interest_memory_bonus: @@INTEREST_MEMORY_BONUS@@
   interest_jitter: @@INTEREST_JITTER@@
   interest_min_length: @@INTEREST_MIN_LENGTH@@
+  interest_followup_seconds: @@INTEREST_FOLLOWUP_SECONDS@@   # 热聊窗口：N 秒内的跟话算话题延续
+  interest_followup_bonus: @@INTEREST_FOLLOWUP_BONUS@@        # 跟话加成分（0=关闭）
 
 # ---------- 对话窗口 ----------
 window:
@@ -219,6 +223,7 @@ def values_from_config(cfg) -> dict:
         "CHAT_MODEL": cfg.llm.model,
         "CHAT_TEMPERATURE": cfg.llm.temperature,
         "CHAT_MAX_TOKENS": cfg.llm.max_tokens,
+        "LLM_EXTRA_BODY": cfg.llm.extra_body_json,
         "EXT_BASE_URL": cfg.extractor.base_url,
         "EXT_MODEL": cfg.extractor.model,
         "EXT_TEMPERATURE": cfg.extractor.temperature,
@@ -247,6 +252,8 @@ def values_from_config(cfg) -> dict:
         "INTEREST_MEMORY_BONUS": cfg.behavior.interest_memory_bonus,
         "INTEREST_JITTER": cfg.behavior.interest_jitter,
         "INTEREST_MIN_LENGTH": cfg.behavior.interest_min_length,
+        "INTEREST_FOLLOWUP_SECONDS": cfg.behavior.interest_followup_seconds,
+        "INTEREST_FOLLOWUP_BONUS": cfg.behavior.interest_followup_bonus,
         "WINDOW_RECENT_TURNS": cfg.window.recent_turns,
         "ONEBOT_WS_URL": cfg.onebot.ws_url,
         "ONEBOT_TOKEN": cfg.onebot.access_token,
@@ -316,6 +323,7 @@ def render_config(values: dict) -> str:
 FORM_KEYS = frozenset({
     "PERSONA_FILE", "DATABASE", "SIM_GROUP_ID",
     "CHAT_KEY", "CHAT_BASE_URL", "CHAT_MODEL", "CHAT_TEMPERATURE", "CHAT_MAX_TOKENS",
+    "LLM_EXTRA_BODY",
     "EXT_BASE_URL", "EXT_MODEL", "EXT_TEMPERATURE", "EXT_MAX_TOKENS",
     "EMBED_PROVIDER", "EMBED_KEY", "EMBED_BASE_URL", "EMBED_MODEL", "EMBED_DIM",
     "LOCAL_MODEL", "LOCAL_DIM", "LOCAL_DEVICE",
@@ -324,6 +332,7 @@ FORM_KEYS = frozenset({
     "INTEREST_ENABLED", "INTEREST_THRESHOLD", "INTEREST_COOLDOWN_SECONDS",
     "INTEREST_COOLDOWN_PENALTY", "INTEREST_QUESTION_BONUS", "INTEREST_MEMORY_BONUS",
     "INTEREST_JITTER", "INTEREST_MIN_LENGTH",
+    "INTEREST_FOLLOWUP_SECONDS", "INTEREST_FOLLOWUP_BONUS",
     "WINDOW_RECENT_TURNS",
     "ONEBOT_WS_URL", "ONEBOT_TOKEN",
     "TELEGRAM_TOKEN", "TG_POLL_TIMEOUT", "TG_REPLY_TO_MESSAGE",

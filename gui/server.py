@@ -164,7 +164,8 @@ class GUIApp:
                         "factors": v.factors, "will_reply": v.will_reply}
         return {"reply": reply, "interest": interest,
                 "events": self._ingest_events(), "persona": pipe.persona.name,
-                "ts": pipe.clock.now()}
+                "ts": pipe.clock.now(),
+                "reasoning": getattr(pipe, "last_reasoning", "") or ""}
 
     async def api_warp(self, seconds: float) -> dict:
         pipe = self.pipeline
