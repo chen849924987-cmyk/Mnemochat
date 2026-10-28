@@ -6,7 +6,7 @@ datas += collect_data_files('jieba')
 
 
 a = Analysis(
-    ['main.py'],
+    ['D:\\bot\\Mnemochat\\main.py'],
     pathex=[],
     binaries=[],
     datas=datas,

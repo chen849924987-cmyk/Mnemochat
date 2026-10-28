@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Mnemochat · 人格卡修改器</title>
+<style>
+  :root { --bg:#12141a; --panel:#1b1f29; --line:#2c3242; --text:#e6e9f2;
+          --dim:#8b93a7; --acc:#5b8cff; --ok:#3ecf8e; --warn:#ffb454; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text);
+         font:14px/1.6 "Segoe UI", "Microsoft YaHei", sans-serif; }
+  header { display:flex; align-items:center; gap:14px; padding:12px 20px;
+           background:var(--panel); border-bottom:1px solid var(--line);
+           position:sticky; top:0; z-index:5; }
+  header h1 { font-size:16px; margin:0; }
+  #path { color:var(--dim); font-size:12px; flex:1; overflow:hidden;
+          text-overflow:ellipsis; white-space:nowrap; }
+  button { background:var(--acc); border:0; color:#fff; padding:7px 16px;
+           border-radius:8px; cursor:pointer; font-size:13px; }
+  button.ghost { background:transparent; border:1px solid var(--line); color:var(--text); }
+  button:disabled { opacity:.5; cursor:default; }
+  main { display:grid; grid-template-columns: 1fr 420px; gap:16px;
+         padding:16px 20px; max-width:1400px; margin:0 auto; }
+  section { background:var(--panel); border:1px solid var(--line);
+            border-radius:12px; padding:14px 16px; margin-bottom:14px; }
+  section h2 { font-size:13px; color:var(--acc); margin:0 0 10px;
+               letter-spacing:.05em; }
+  label { display:block; color:var(--dim); font-size:12px; margin:10px 0 4px; }
+  input[type=text], textarea { width:100%; background:#141821; color:var(--text);
+    border:1px solid var(--line); border-radius:8px; padding:8px 10px;
+    font:inherit; resize:vertical; }
+  textarea { min-height:64px; }
+  .row { display:flex; gap:12px; } .row > div { flex:1; }
+  .check { display:flex; align-items:center; gap:8px; color:var(--text);
+           font-size:13px; margin:6px 0; cursor:pointer; }
+  .param { display:grid; grid-template-columns: 110px 1fr 42px 28px;
+           gap:10px; align-items:center; margin:6px 0; }
+  .param input[type=text] { padding:5px 8px; }
+  .param input[type=range] { width:100%; accent-color:var(--acc); }
+  .param .val { text-align:center; color:var(--acc); font-weight:600; }
+  .param button { padding:2px 8px; background:transparent; color:var(--dim);
+                  border:1px solid var(--line); border-radius:6px; }
+  .chips { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+  .chip { background:#242a38; border:1px solid var(--line); color:var(--dim);
+          border-radius:20px; padding:2px 12px; cursor:pointer; font-size:12px; }
+  .chip:hover { color:var(--text); border-color:var(--acc); }
+  aside { position:sticky; top:70px; align-self:start; }
+  aside pre { background:#0e1118; border:1px solid var(--line); border-radius:10px;
+              padding:12px; white-space:pre-wrap; word-break:break-word;
+              font-size:12px; max-height:70vh; overflow:auto; color:#c7d0e4; }
+  #status { font-size:12px; }
+  .ok { color:var(--ok); } .err { color:var(--warn); }
+  footer { color:var(--dim); font-size:11px; padding:8px 20px 24px; }
+  @media (max-width: 1000px) { main { grid-template-columns:1fr; }
+                               aside { position:static; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>🐟 Mnemochat 人格卡修改器</h1>
+  <span id="path"></span>
+  <span id="status"></span>
+  <button class="ghost" onclick="preview()">预览 Prompt</button>
+  <button onclick="save()">保存</button>
+</header>
+
+<main>
+<div>
+  <section>
+    <h2>基本信息</h2>
+    <div class="row">
+      <div><label>名字（也是群里的唤醒词）</label>
+        <input type="text" id="name"></div>
+      <div><label>入群问候语（可留空）</label>
+        <input type="text" id="greeting"></div>
+    </div>
+    <label>核心人格（永不衰减，每次固定注入）</label>
+    <textarea id="identity" rows="7"></textarea>
+    <label>说话风格</label>
+    <textarea id="speech_style" rows="2"></textarea>
+    <label>口头禅（逗号分隔）</label>
+    <input type="text" id="catchphrases">
+    <label>兴趣词（逗号分隔；群聊中出现这些话题时机器人更容易接话）</label>
+    <input type="text" id="interests">
+  </section>
+
+  <section>
+    <h2>性格参数（滑条 · 注入为分寸参考）</h2>
+    <div id="params"></div>
+    <button class="ghost" onclick="addParam()">＋ 添加参数</button>
+    <div class="chips" id="chips"></div>
+  </section>
+
+  <section>
+    <h2>记忆与边界</h2>
+    <label>记忆使用准则（留空使用默认：自然想起、模糊时间、不编造）</label>
+    <textarea id="memory_stance" rows="3"></textarea>
+    <label class="check"><input type="checkbox" id="cross_group">
+      允许使用其他群的记忆（跨群共享，默认关闭防隐私泄漏）</label>
+    <label class="check"><input type="checkbox" id="include_self">
+      允许使用机器人自己的私密记忆</label>
+    <label>附加指令（追加到 system prompt）</label>
+    <textarea id="system_extra" rows="2"></textarea>
+  </section>
+
+  <section>
+    <h2>导入 SillyTavern（酒馆）角色卡</h2>
+    <p style="color:var(--dim);font-size:12px;margin:4px 0 8px">
+      支持内嵌 JSON 的 PNG 卡（chub.ai 等站点下载）或 V1/V2/V3 的 JSON。
+      导入会填充左侧表单（不自动保存），性格参数滑条需自行设定。</p>
+    <input type="file" id="cardfile" accept=".png,.json"
+           onchange="importCard(this)">
+  </section>
+</div>
+
+<aside>
+  <section>
+    <h2>最终 System Prompt 预览</h2>
+    <pre id="preview">点击「预览 Prompt」查看注入效果</pre>
+  </section>
+</aside>
+</main>
+
+<footer>保存即写入 yaml（首次自动备份 .bak）· 运行中的机器人下一条消息自动热重载 · 仅监听 127.0.0.1</footer>
+
+<script>
+let persona = null;
+
+const PRESETS = ["活泼","温柔","傲娇","毒舌","黏人","正经","技术宅","摸鱼"];
+
+function setStatus(msg, cls) {
+  const el = document.getElementById("status");
+  el.textContent = msg; el.className = cls || "";
+}
+async function api(path, body) {
+  const r = await fetch(path, body ? {method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body: JSON.stringify(body)} : undefined);
+  return r.json();
+}
+
+function render() {
+  document.getElementById("name").value = persona.name || "";
+  document.getElementById("greeting").value = persona.greeting || "";
+  document.getElementById("identity").value = persona.identity || "";
+  document.getElementById("speech_style").value = persona.speech_style || "";
+  document.getElementById("catchphrases").value =
+    (persona.catchphrases || []).join("，");
+  document.getElementById("interests").value =
+    (persona.interests || []).join("，");
+  document.getElementById("memory_stance").value = persona.memory_stance || "";
+  document.getElementById("system_extra").value = persona.system_extra || "";
+  const b = persona.boundary || {};
+  document.getElementById("cross_group").checked = !!b.cross_group;
+  document.getElementById("include_self").checked =
+    b.include_self !== undefined ? !!b.include_self : true;
+  renderParams();
+  const chips = document.getElementById("chips");
+  chips.innerHTML = "";
+  PRESETS.forEach(name => {
+    if (persona.parameters && persona.parameters[name] !== undefined) return;
+    const s = document.createElement("span");
+    s.className = "chip"; s.textContent = "＋" + name;
+    s.onclick = () => { addParam(name, 5); };
+    chips.appendChild(s);
+  });
+}
+
+function renderParams() {
+  persona.parameters = persona.parameters || {};
+  const box = document.getElementById("params");
+  box.innerHTML = "";
+  for (const [key, val] of Object.entries(persona.parameters)) {
+    const row = document.createElement("div");
+    row.className = "param";
+    row.innerHTML = `<input type="text" value="${key}">
+      <input type="range" min="0" max="10" step="1" value="${val}">
+      <span class="val">${val}</span>
+      <button>✕</button>`;
+    const [nameIn, range, valEl, del] = row.children;
+    nameIn.onchange = () => { delete persona.parameters[key];
+      persona.parameters[nameIn.value || key] = Number(range.value); renderParams(); };
+    range.oninput = () => { valEl.textContent = range.value;
+      persona.parameters[nameIn.value || key] = Number(range.value); };
+    del.onclick = () => { delete persona.parameters[nameIn.value || key]; renderParams(); render(); };
+    box.appendChild(row);
+  }
+}
+function addParam(name, val) {
+  persona.parameters = persona.parameters || {};
+  const key = name || prompt("参数名（如：傲娇）", "");
+  if (!key) return;
+  persona.parameters[key] = (val !== undefined) ? val
+    : (persona.parameters[key] !== undefined ? persona.parameters[key] : 5);
+  renderParams(); render();
+}
+
+function collect() {
+  persona.name = document.getElementById("name").value.trim() || "未命名";
+  persona.greeting = document.getElementById("greeting").value;
+  persona.identity = document.getElementById("identity").value;
+  persona.speech_style = document.getElementById("speech_style").value;
+  persona.catchphrases = document.getElementById("catchphrases").value
+    .split(/[,，、]/).map(s => s.trim()).filter(Boolean);
+  persona.interests = document.getElementById("interests").value
+    .split(/[,，、]/).map(s => s.trim()).filter(Boolean);
+  persona.memory_stance = document.getElementById("memory_stance").value;
+  persona.system_extra = document.getElementById("system_extra").value;
+  persona.boundary = {
+    cross_group: document.getElementById("cross_group").checked,
+    include_self: document.getElementById("include_self").checked,
+  };
+  return persona;
+}
+
+async function save() {
+  const data = collect();
+  setStatus("保存中…");
+  const resp = await api("/api/persona", data);
+  setStatus(resp.ok ? "✓ 已保存并热重载" : "✗ " + resp.error,
+           resp.ok ? "ok" : "err");
+}
+async function preview() {
+  const resp = await api("/api/preview", collect());
+  document.getElementById("preview").textContent = resp.ok
+    ? resp.system_prompt : ("预览失败：" + resp.error);
+}
+async function importCard(input) {
+  const file = input.files[0];
+  if (!file) return;
+  setStatus("解析中…");
+  let resp;
+  if (file.name.toLowerCase().endsWith(".png")) {
+    const b64 = await new Promise(res => {
+      const fr = new FileReader();
+      fr.onload = () => res(fr.result.split(",")[1]);
+      fr.readAsDataURL(file);
+    });
+    resp = await api("/api/import_card", {png_base64: b64});
+  } else {
+    const text = await file.text();
+    try { resp = await api("/api/import_card", {json: JSON.parse(text)}); }
+    catch { resp = {ok:false, error:"JSON 解析失败"}; }
+  }
+  if (resp.ok) {
+    persona = resp.persona; render();
+    setStatus("✓ 导入成功，检查后点「保存」", "ok");
+  } else setStatus("✗ " + resp.error, "err");
+  input.value = "";
+}
+
+(async () => {
+  const resp = await api("/api/persona");
+  if (!resp.ok) { setStatus(resp.error, "err"); return; }
+  document.getElementById("path").textContent = resp.path;
+  persona = resp.persona; render();
+})();
+</script>
+</body>
+</html>

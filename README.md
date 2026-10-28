@@ -209,12 +209,19 @@ social:
 
 ```bash
 pip install pyinstaller
-pyinstaller Mnemochat.spec
+python scripts/build_exe.py            # 构建并同步到 dist/Mnemochat
+python scripts/build_exe.py --skip-build   # 只同步（已构建过时）
 ```
 
 生成 `dist/Mnemochat/`——把**整个文件夹**拷到任何 Windows 电脑（或本机其他位置），
 双击 `Mnemochat.exe` 即启动图形控制台并自动打开浏览器，无需安装 Python 和任何依赖。
 默认双击 = `--gui`；也可在命令行传参（`Mnemochat.exe --onebot` 等）。
+
+**更新版本时配置不丢**：构建脚本只覆盖程序文件（Mnemochat.exe、_internal），
+`config.yaml`、`.env`、`personas/`、`data/` 原样保留（personas 仅新增不覆盖）。
+注意更新前先关掉正在运行的 Mnemochat（Windows 不允许覆盖运行中的 exe）。
+手动升级同理：用新版覆盖 `Mnemochat.exe` 与 `_internal/` 两个程序文件即可，
+其余都是你的数据。
 
 首次运行会在 exe 旁自动生成 `personas/` 模板与 `config.example.yaml`；
 `config.yaml`、`.env`、`data/`（记忆库）都保存在 exe 目录——整个文件夹拷走即完成迁移。
