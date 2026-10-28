@@ -257,8 +257,9 @@ class GUIApp:
     async def api_history(self, limit: int) -> dict:
         rows = await self.store.recent_messages(self.cfg.sim_group_id, limit)
         return {"ok": True, "items": [
-            {"name": r.user_name, "user_id": r.user_id, "content": r.content,
-             "ts": r.ts, "replied": r.replied} for r in rows]}
+            {"id": r.id, "name": r.user_name, "user_id": r.user_id,
+             "content": r.content, "ts": r.ts, "replied": r.replied}
+            for r in rows]}
 
     async def api_status(self) -> dict:
         pipe = self.pipeline

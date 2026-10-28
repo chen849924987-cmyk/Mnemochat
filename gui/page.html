@@ -438,6 +438,7 @@ let VALUES = {};            // 配置全量值（含界面未展示的高级项�
 let statusCache = null;
 let BOTS = new Set();       // 机器人名字集合（主卡 + 串门客卡）——气泡靠它分左右
 let lastTs = 0;             // 聊天记录增量刷新水位
+let renderedIds = new Set();// 已渲染的消息 id（防 30s 轮询重复追加）
 
 async function api(path, body) {
   const r = await fetch(path, body !== undefined ? {method:"POST",
@@ -534,9 +535,12 @@ async function send() {
   try {
     const resp = await api("/api/chat", {name, text, force: $("forceAt").checked});
     if (!resp.ok) { addMsg("evt", "", "⚠ 发送失败：" + (resp.error || "未知错误")); }
-    else if (resp.reply) { addMsg("bot", resp.persona, resp.reply); }
-    else if (resp.interest) { showInterest(resp.interest); }
-    addEvents(resp.events);
+    else {
+      if (resp.ts) lastTs = Math.max(lastTs, resp.ts);   // 本地已渲染，轮询别再补一遍
+      if (resp.reply) { addMsg("bot", resp.persona, resp.reply); }
+      else if (resp.interest) { showInterest(resp.interest); }
+      addEvents(resp.events);
+    }
   } catch (e) { addMsg("evt", "", "⚠ 发送失败：" + e); }
   refreshStatus();
 }
@@ -871,13 +875,15 @@ async function testEmbed() {
 
 /* ---------- 启动 ---------- */
 function renderHistory(items) {
-  items.forEach(m => {           // 接口已按时间正序返回；增量只补水位之后的新消息
-    if (m.ts <= lastTs) return;
-    lastTs = m.ts;
+  let added = false;
+  items.forEach(m => {           // 接口已按时间正序返回；按 id 去重 + 水位增量
+    if (m.ts <= lastTs || (m.id != null && renderedIds.has(m.id))) return;
+    if (m.id != null) renderedIds.add(m.id);
+    lastTs = Math.max(lastTs, m.ts);
     addMsg(BOTS.has(m.name) ? "bot" : "user", m.name, m.content);
+    added = true;
   });
-  const log = $("log");
-  log.scrollTop = log.scrollHeight;
+  if (added) { const log = $("log"); log.scrollTop = log.scrollHeight; }
 }
 (async () => {
   const s = await refreshStatus();
