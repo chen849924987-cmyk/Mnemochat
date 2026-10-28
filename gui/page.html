@@ -910,6 +910,7 @@ function renderHistory(items) {
     if (m.id != null) renderedIds.add(m.id);
     lastTs = Math.max(lastTs, m.ts);
     addMsg(BOTS.has(m.name) ? "bot" : "user", m.name, m.content);
+    if (m.reasoning) addReasoning(m.reasoning);   // 历史消息里的思维链也能回看
     added = true;
   });
   if (added) { const log = $("log"); log.scrollTop = log.scrollHeight; }

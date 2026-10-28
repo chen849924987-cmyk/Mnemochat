@@ -46,6 +46,13 @@ class MemoryStore:
         if with_stickers:
             await self._db.executescript(_STICKER_SCHEMA.read_text(encoding="utf-8"))
         await self._db.commit()
+        # 旧库迁移：messages 补 reasoning 列（思维链留存，v0.11 前建的库没有）
+        cols = {r[1] for r in await self._db.execute_fetchall(
+            "PRAGMA table_info(messages)")}
+        if "reasoning" not in cols:
+            await self._db.execute(
+                "ALTER TABLE messages ADD COLUMN reasoning TEXT NOT NULL DEFAULT ''")
+            await self._db.commit()
 
     async def close(self) -> None:
         if self._db:
@@ -65,12 +72,13 @@ class MemoryStore:
     # ---------- messages ----------
 
     async def add_message(
-        self, group_id: str, user_id: str, user_name: str, content: str, ts: float
+        self, group_id: str, user_id: str, user_name: str, content: str, ts: float,
+        reasoning: str = "",
     ) -> int:
         cur = await self.db.execute(
-            "INSERT INTO messages(group_id, user_id, user_name, content, ts, replied) "
-            "VALUES(?,?,?,?,?,0)",
-            (group_id, user_id, user_name, content, ts),
+            "INSERT INTO messages(group_id, user_id, user_name, content, ts, replied, reasoning) "
+            "VALUES(?,?,?,?,?,0,?)",
+            (group_id, user_id, user_name, content, ts, reasoning),
         )
         await self.db.commit()
         return cur.lastrowid

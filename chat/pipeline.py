@@ -183,7 +183,8 @@ class BotPipeline:
         # 机器人自己的发言也入日志与 ingest 缓冲（约定、互动都是记忆）
         ts = self.clock.now()
         reply_id = await self.store.add_message(
-            group_id, self.persona.name, self.persona.name, reply, ts
+            group_id, self.persona.name, self.persona.name, reply, ts,
+            reasoning=self.last_reasoning,
         )
         self._pending.setdefault(group_id, []).append(MessageRecord(
             id=reply_id, group_id=group_id, user_id=self.persona.name,

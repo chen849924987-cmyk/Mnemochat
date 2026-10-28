@@ -23,6 +23,7 @@ class MessageRecord(BaseModel):
     content: str
     ts: float
     replied: bool = False
+    reasoning: str = ""
 
 
 class MemoryRecord(BaseModel):
@@ -114,4 +115,5 @@ def message_from_row(row) -> MessageRecord:
         content=row["content"],
         ts=row["ts"],
         replied=bool(row["replied"]),
+        reasoning=row["reasoning"],
     )

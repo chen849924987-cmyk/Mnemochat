@@ -260,7 +260,8 @@ class GUIApp:
         rows = await self.store.recent_messages(self.cfg.sim_group_id, limit)
         return {"ok": True, "items": [
             {"id": r.id, "name": r.user_name, "user_id": r.user_id,
-             "content": r.content, "ts": r.ts, "replied": r.replied}
+             "content": r.content, "ts": r.ts, "replied": r.replied,
+             "reasoning": r.reasoning}
             for r in rows]}
 
     async def api_status(self) -> dict:

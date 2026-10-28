@@ -12,7 +12,8 @@ CREATE TABLE IF NOT EXISTS messages (
     user_name   TEXT NOT NULL,
     content     TEXT NOT NULL,
     ts          REAL NOT NULL,
-    replied     INTEGER NOT NULL DEFAULT 0
+    replied     INTEGER NOT NULL DEFAULT 0,
+    reasoning   TEXT NOT NULL DEFAULT ''   -- 思维链（模型返回时留存，供回看/调人格）
 );
 CREATE INDEX IF NOT EXISTS idx_messages_group_ts ON messages(group_id, ts);
 
