@@ -9,6 +9,8 @@ V2/V3 规范见：
 
 from __future__ import annotations
 
+import re
+
 import base64
 import json
 import zlib
@@ -93,8 +95,17 @@ def st_card_to_persona(card: dict) -> dict:
         extra_parts.append(g("post_history_instructions"))
 
     speech_style = ""
+    examples: list[str] = []
     if g("mes_example"):
-        speech_style = f"参考示例对话的语气说话。示例：{g('mes_example')[:400]}"
+        raw = str(g("mes_example"))
+        # 酒馆卡示例对话按 <START> 或空行分段，取前 6 段作参考对话
+        segs = [
+            seg.strip().lstrip("<START>").strip()
+            for seg in re.split(r"<START>|\n\s*\n", raw)
+            if seg.strip()
+        ]
+        examples = [seg[:300] for seg in segs if seg][:6]
+        speech_style = f"参考示例对话的语气说话。示例：{raw[:300]}"
 
     tags = [str(t) for t in (m.get("tags") or [])][:10]
     notes = "、".join(filter(None, [
@@ -108,6 +119,7 @@ def st_card_to_persona(card: dict) -> dict:
         "name": g("name") or "未命名",
         "identity": "\n\n".join(identity_parts) or "（导入卡未提供描述）",
         "speech_style": speech_style,
+            "examples": examples,
         "catchphrases": [],
         "memory_stance": "",   # 留空 → 使用默认记忆使用准则
         "boundary": {"cross_group": False, "include_self": True},

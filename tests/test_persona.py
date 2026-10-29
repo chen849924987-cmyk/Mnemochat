@@ -2,6 +2,7 @@
 
 from memory.models import MemoryRecord
 from memory.recall import RecallResult, ScoredMemory
+from persona.card import PersonaCard
 from persona.guard import build_reply_system, render_memory_block
 
 
@@ -58,3 +59,20 @@ def test_build_reply_system_always_anchors_identity(persona, clock):
     system2 = build_reply_system(persona, RecallResult([], ""), "g1", now)
     assert "小满" in system2
     assert "[你的回忆" not in system2
+
+
+def test_catchphrase_frequency_and_examples():
+    """口癖降频（偏好而非每句必带）+ 参考对话块渲染。"""
+    card = PersonaCard(
+        name="小满", identity="你是小满",
+        catchphrases=["诶", "我记得呀"],
+        examples=["用户：早上好呀" + chr(10) + "小满：早上好~今天也元气满满哦"],
+    )
+    prompt = card.build_system_prompt("g1", 0.0)
+    assert "自然穿插" in prompt
+    assert "把口头禅硬塞进每句话 = 失败" in prompt
+    assert "【参考对话" in prompt and "元气满满" in prompt
+
+    plain = PersonaCard(name="小满", identity="你是小满")
+    p2 = plain.build_system_prompt("g1", 0.0)
+    assert "【口头禅" not in p2 and "【参考对话" not in p2

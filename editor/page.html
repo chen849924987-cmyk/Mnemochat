@@ -82,6 +82,8 @@
     <input type="text" id="catchphrases">
     <label>兴趣词（逗号分隔；群聊中出现这些话题时机器人更容易接话）</label>
     <input type="text" id="interests">
+    <label>参考对话示例（每行一条；可含「用户：…」与角色回复——模型会学这里的语气与节奏）</label>
+    <textarea id="examples" rows="4" placeholder="例：&#10;用户：你好，你是谁？&#10;雪莉：你好！我是名侦探雪莉，请多指教！"></textarea>
   </section>
 
   <section>
@@ -148,6 +150,8 @@ function render() {
     (persona.catchphrases || []).join("，");
   document.getElementById("interests").value =
     (persona.interests || []).join("，");
+  document.getElementById("examples").value =
+    (persona.examples || []).join("\n");
   document.getElementById("memory_stance").value = persona.memory_stance || "";
   document.getElementById("system_extra").value = persona.system_extra || "";
   const b = persona.boundary || {};
@@ -204,6 +208,8 @@ function collect() {
     .split(/[,，、]/).map(s => s.trim()).filter(Boolean);
   persona.interests = document.getElementById("interests").value
     .split(/[,，、]/).map(s => s.trim()).filter(Boolean);
+  persona.examples = document.getElementById("examples").value
+    .split(/\n/).map(s => s.trim()).filter(Boolean);
   persona.memory_stance = document.getElementById("memory_stance").value;
   persona.system_extra = document.getElementById("system_extra").value;
   persona.boundary = {
