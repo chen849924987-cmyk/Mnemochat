@@ -95,13 +95,51 @@ async def perform_visit(host_pipe: "BotPipeline", host_store: "MemoryStore",
         await close_stores(guest_pipe, guest_store)
 
 
+def effective_visits(cfg) -> list:
+    """有效串门关系 = 各角色卡自带 social 设定 + config.social.visits 追加项。
+
+    角色卡的 social.visit_enabled 是"这张卡想不想去串门"的人格属性；
+    config.social.visits 保留为兼容/手动追加（同卡不重复）。"""
+    from pathlib import Path
+
+    from config import SocialVisit
+    from persona.card import PersonaCard
+    from util.appdir import base_dir
+
+    out: list = []
+    seen: set[str] = set()
+    active = Path(cfg.persona_file).name
+    personas_dir = base_dir() / "personas"
+    for p in sorted(personas_dir.glob("*.yaml")):
+        if p.name == active:
+            continue          # 自己不去自己的群串门
+        try:
+            card = PersonaCard.load_yaml(p)
+        except Exception:
+            continue
+        social = card.social
+        if not social.visit_enabled:
+            continue
+        db = social.visit_database or str(
+            Path(cfg.database).parent / f"memory_{p.stem}.db")
+        rel = f"personas/{p.name}"
+        out.append(SocialVisit(persona_file=rel, database=db,
+                               every_hours=social.visit_every_hours))
+        seen.add(rel)
+    for v in getattr(cfg.social, "visits", []) or []:
+        if v.persona_file not in seen:
+            out.append(v)
+            seen.add(v.persona_file)
+    return out
+
+
 def due_visits(cfg, clock, last_visit: dict[int, float]) -> list[int]:
     """到期的串门关系下标（首次引入的关系立即视为到期，之后按 every_hours 间隔）。"""
     if not cfg.social.enabled:
         return []
     now = clock.now()
     due = []
-    for i, v in enumerate(cfg.social.visits):
+    for i, v in enumerate(effective_visits(cfg)):
         last = last_visit.get(i)
         if last is None or now - last >= v.every_hours * 3600:
             due.append(i)
@@ -117,13 +155,14 @@ async def run_visit_scheduler(pipe: "BotPipeline", store: "MemoryStore",
         await asyncio.sleep(60)
         try:
             due = due_visits(cfg, clock, last_visit)
+            visits = effective_visits(cfg)
         except Exception:
             continue
         for i in due:
             last_visit[i] = clock.now()
             try:
                 res = await perform_visit(pipe, store, cfg, clock,
-                                          cfg.social.visits[i], mock=mock)
+                                          visits[i], mock=mock)
                 log.info("自动串门：%s 来到了 %s 的群", res["guest"], res["host"])
             except Exception:
                 log.exception("自动串门失败（关系 #%s）", i)

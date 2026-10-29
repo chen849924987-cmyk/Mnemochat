@@ -243,7 +243,9 @@ class GUIApp:
         """手动触发一次串门（缺省选第一条关系）；自动调度共用同一引擎。"""
         from social.visits import perform_visit
 
-        visits = self.cfg.social.visits
+        from social.visits import effective_visits
+
+        visits = effective_visits(self.cfg)
         if not visits:
             return {"ok": False, "error": "还没有配置串门关系——到「设置 · 社交与串门」添加"}
         if index is None:
@@ -448,6 +450,29 @@ class GUIApp:
                 return {"ok": False, "error": f"绑定角色卡失败：{e}"}
         return {"ok": True, "path": str(path), "count": len(clean)}
 
+    def api_persona_social(self, persona_file: str, social: dict) -> dict:
+        """保存角色卡的串门设定（串门是人格属性，绑在卡上）。"""
+        card = self._resolve(persona_file)
+        if not card.exists():
+            return {"ok": False, "error": f"角色卡不存在：{persona_file}"}
+        try:
+            data = load_persona(card)
+            cur = dict(data.get("social") or {})
+            cur.update({
+                "visit_enabled": bool(social.get("visit_enabled")),
+                "visit_every_hours": float(social.get("visit_every_hours") or 12),
+                "visit_database": str(social.get("visit_database") or "").strip(),
+            })
+            data["social"] = cur
+            PersonaCard.model_validate(data)
+            state = (self.editor_state
+                     if Path(self.editor_state.card_path).resolve() == card.resolve()
+                     else EditorState(card))
+            save_persona(state, data)
+            return {"ok": True, "social": cur}
+        except Exception as e:
+            return {"ok": False, "error": f"{type(e).__name__}: {e}"}
+
     def api_personas(self) -> dict:
         active = str(Path(self._resolve(self.cfg.persona_file)))
         out = []
@@ -456,9 +481,16 @@ class GUIApp:
                 name = (load_persona(p) or {}).get("name") or p.stem
             except Exception:
                 name = p.stem
+            try:
+                card_obj = PersonaCard.load_yaml(p)
+            except Exception:
+                card_obj = None
+            is_active = Path(self._resolve(f"personas/{p.name}")) == Path(active)
             out.append({"file": f"personas/{p.name}", "name": name,
-                        "is_active": Path(self._resolve(f"personas/{p.name}")) == Path(active),
-                        "db": self._persona_db_path(f"personas/{p.name}")})
+                        "is_active": is_active,
+                        "db": self._persona_db_path(f"personas/{p.name}"),
+                        "social": (card_obj.social.model_dump() if card_obj else {}),
+                        "can_visit": (not is_active and card_obj is not None)})
         return {"ok": True, "items": out,
                 "current": str(self.editor_state.card_path),
                 "per_persona_memory": self.cfg.per_persona_memory}
@@ -764,6 +796,10 @@ def make_handler(app: GUIApp) -> type[BaseHTTPRequestHandler]:
                     except Exception as e:
                         return self._json({"ok": False,
                                            "error": f"校验/保存失败：{e}"}, 400)
+                if self.path == "/api/persona_social":
+                    return self._json(app.api_persona_social(
+                        str(payload.get("persona_file") or ""),
+                        payload.get("social") or {}))
                 if self.path == "/api/corpus":
                     return self._json(app.api_corpus(
                         str(payload.get("persona_file") or "")))

@@ -25,6 +25,19 @@ class PersonaBoundary(BaseModel):
     include_self: bool = True   # 是否允许使用机器人自己的私密记忆(visibility=self)
 
 
+class PersonaSocial(BaseModel):
+    """角色卡自带的串门设定：这张卡是否作为客人出现在其他卡的群里。
+
+    串门属于"这个角色想不想去串门"的人格属性，因此绑在角色卡上而不是全局配置；
+    config.social 只保留全局开关（enabled / host_replies / prefix_guest_name）。"""
+
+    model_config = ConfigDict(extra="ignore")
+
+    visit_enabled: bool = False
+    visit_every_hours: float = 12
+    visit_database: str = ""   # 留空 = 自动 data/memory_<卡名>.db（独立记忆宇宙）
+
+
 class PersonaCard(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
@@ -38,6 +51,7 @@ class PersonaCard(BaseModel):
     # 绑定角色的初始语料库（JSON，词条 kind/phrase/meaning/example）：
     # 按轮抽样注入【语感参考】，不压缩进角色卡本身——忠实还原与语感扩充两不误
     corpus_file: str = ""
+    social: PersonaSocial = PersonaSocial()
     memory_stance: str = ""
     boundary: PersonaBoundary = PersonaBoundary()
     system_extra: str = ""

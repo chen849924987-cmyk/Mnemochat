@@ -248,7 +248,10 @@ def test_visit_engine_and_universes(app, tmp_path):
     app.cfg.social.visits = [SocialVisit(
         persona_file="personas/dafeiyu.yaml",
         database=str(tmp_path / "guest.db"))]
-    r = _post(app.port, "/api/visit", {})
+    from social.visits import effective_visits
+    idx = next(i for i, v in enumerate(effective_visits(app.cfg))
+               if v.persona_file.endswith("dafeiyu.yaml"))
+    r = _post(app.port, "/api/visit", {"index": idx})
     assert r["ok"], r
     assert r["guest"] == "大肥鱼" and r["text"]
     assert r["host"] == "小满" and r["reply"]          # 主卡接话
@@ -326,8 +329,11 @@ def test_visit_qq_top_account_sender(app, tmp_path):
     app.cfg.social.visits = [SocialVisit(
         persona_file="personas/dafeiyu.yaml",
         database=str(tmp_path / "guest2.db"))]
+    from social.visits import effective_visits
+    idx = next(i for i, v in enumerate(effective_visits(app.cfg))
+               if v.persona_file.endswith("dafeiyu.yaml"))
     try:
-        r = _post(app.port, "/api/visit", {})
+        r = _post(app.port, "/api/visit", {"index": idx})
         assert r["ok"], r
         assert r["reply"]                              # 主卡接话已生成
         assert sent, "顶号模式下应经发送器发出"
