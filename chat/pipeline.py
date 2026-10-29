@@ -169,6 +169,18 @@ class BotPipeline:
         core = await self.recaller.core_block(group_id, self.persona)
         if core:
             system = f"{system}\n\n{core}"
+        if self.persona.corpus_file:
+            from persona.corpus import load_entries, sample, render as render_corpus
+
+            from util.appdir import base_dir
+
+            cf = Path(self.persona.corpus_file)
+            entries = load_entries(cf if cf.is_absolute() else base_dir() / cf)
+            if entries:
+                picked = sample(entries, group_id, now, k=4, rotate_minutes=3)
+                block = render_corpus(picked)
+                if block:
+                    system = f"{system}\n\n{block}"
         if self.sticker_lib is not None:
             block = await self.sticker_lib.prompt_block(group_id)
             if block:

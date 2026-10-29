@@ -360,6 +360,94 @@ class GUIApp:
 
     # ---------- 人格卡 ----------
 
+    # ---------- 角色语料库 ----------
+
+    def _corpus_path(self, persona_file: str) -> Path:
+        """该角色卡绑定的语料库路径；未绑定时默认 <卡名>.corpus.json。"""
+        card = self._resolve(persona_file)
+        try:
+            data = load_persona(card) or {}
+        except Exception:
+            data = {}
+        rel = str(data.get("corpus_file") or "")
+        if rel:
+            p = Path(rel)
+            return p if p.is_absolute() else self.root / p
+        return card.with_suffix(".corpus.json")
+
+    def api_corpus(self, persona_file: str) -> dict:
+        """读取角色语料库（不存在则返回空库 + 建议路径）。"""
+        card = self._resolve(persona_file)
+        if not card.exists():
+            return {"ok": False, "error": f"角色卡不存在：{persona_file}"}
+        path = self._corpus_path(persona_file)
+        entries: list[dict] = []
+        note = ""
+        if path.exists():
+            try:
+                import json as _json
+
+                raw = _json.loads(path.read_text(encoding="utf-8"))
+                entries = raw.get("entries") or []
+                note = raw.get("note") or ""
+            except Exception as e:
+                return {"ok": False, "error": f"语料库解析失败：{e}"}
+        return {"ok": True, "path": str(path), "exists": path.exists(),
+                "entries": entries, "note": note,
+                "bound": bool(load_persona(card).get("corpus_file"))}
+
+    def api_corpus_save(self, persona_file: str, entries: list[dict],
+                        bind: bool) -> dict:
+        """保存语料库；bind=True 时把路径写进角色卡 corpus_file。"""
+        card = self._resolve(persona_file)
+        if not card.exists():
+            return {"ok": False, "error": f"角色卡不存在：{persona_file}"}
+        path = self._corpus_path(persona_file)
+        clean: list[dict] = []
+        seen: set[str] = set()
+        for e in entries or []:
+            phrase = str((e or {}).get("phrase") or "").strip()
+            if not phrase or phrase in seen:
+                continue          # 空条目与重复短语直接跳过
+            seen.add(phrase)
+            clean.append({
+                "kind": str(e.get("kind") or "台词").strip(),
+                "phrase": phrase,
+                "meaning": str(e.get("meaning") or "").strip(),
+                "source": str(e.get("source") or "").strip(),
+                "example": str(e.get("example") or "").strip(),
+            })
+        try:
+            import json as _json
+
+            payload = {"role": load_persona(card).get("name", card.stem),
+                       "note": f"{card.stem} 的语料库（GUI 编辑）。按轮抽样注入【语感参考】。",
+                       "entries": clean}
+            if path.exists():
+                try:   # 保留原 note
+                    old = _json.loads(path.read_text(encoding="utf-8"))
+                    if old.get("note"):
+                        payload["note"] = old["note"]
+                except Exception:
+                    pass
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(_json.dumps(payload, ensure_ascii=False, indent=1),
+                            encoding="utf-8")
+        except Exception as e:
+            return {"ok": False, "error": f"写入失败：{e}"}
+        if bind:
+            try:
+                data = load_persona(card)
+                rel = path.relative_to(self.root).as_posix() if                     path.is_relative_to(self.root) else str(path)
+                data["corpus_file"] = rel
+                PersonaCard.model_validate(data)
+                save_persona(self.editor_state if
+                             Path(self.editor_state.card_path).resolve() == card.resolve()
+                             else EditorState(card), data)
+            except Exception as e:
+                return {"ok": False, "error": f"绑定角色卡失败：{e}"}
+        return {"ok": True, "path": str(path), "count": len(clean)}
+
     def api_personas(self) -> dict:
         active = str(Path(self._resolve(self.cfg.persona_file)))
         out = []
@@ -676,6 +764,14 @@ def make_handler(app: GUIApp) -> type[BaseHTTPRequestHandler]:
                     except Exception as e:
                         return self._json({"ok": False,
                                            "error": f"校验/保存失败：{e}"}, 400)
+                if self.path == "/api/corpus":
+                    return self._json(app.api_corpus(
+                        str(payload.get("persona_file") or "")))
+                if self.path == "/api/corpus_save":
+                    return self._json(app.api_corpus_save(
+                        str(payload.get("persona_file") or ""),
+                        payload.get("entries") or [],
+                        bool(payload.get("bind", True))))
                 if self.path == "/api/persona_select":
                     return self._json(app.api_persona_select(
                         str(payload.get("path") or "")))

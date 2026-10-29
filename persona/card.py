@@ -35,6 +35,9 @@ class PersonaCard(BaseModel):
     # 参考对话/原声台词（每条一行，如「用户：…」/「角色：…」或纯角色台词）：
     # 学这里的语气、自称与节奏，比形容词式性格描述有效得多。酒馆卡 mes_example 自动映射到此。
     examples: list[str] = Field(default_factory=list)
+    # 绑定角色的初始语料库（JSON，词条 kind/phrase/meaning/example）：
+    # 按轮抽样注入【语感参考】，不压缩进角色卡本身——忠实还原与语感扩充两不误
+    corpus_file: str = ""
     memory_stance: str = ""
     boundary: PersonaBoundary = PersonaBoundary()
     system_extra: str = ""

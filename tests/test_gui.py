@@ -358,3 +358,30 @@ def test_universes_cover_all_personas(app, tmp_path):
         assert len(active) == 1 and active[0]["name"] == "小满"
     finally:
         app.cfg.per_persona_memory = False
+
+
+def test_corpus_api_roundtrip(app, tmp_path):
+    """语料库 API：读取→保存（去重/去空）→绑定写回角色卡。"""
+    card = str(app.cfg.persona_file)
+
+    r0 = _post(app.port, "/api/corpus", {"persona_file": card})
+    assert r0["ok"] and r0["entries"] == []          # 初始为空
+
+    entries = [
+        {"kind": "台词", "phrase": "测试台词A", "meaning": "登场时", "example": "例A"},
+        {"kind": "台词", "phrase": "测试台词A", "meaning": "重复", "example": ""},  # 去重
+        {"kind": "情绪", "phrase": "  ", "meaning": "空条目", "example": ""},        # 去空
+        {"kind": "情绪", "phrase": "测试台词B", "meaning": "被夸时", "example": "例B"},
+    ]
+    r1 = _post(app.port, "/api/corpus_save",
+               {"persona_file": card, "entries": entries, "bind": True})
+    assert r1["ok"] and r1["count"] == 2
+    assert Path(r1["path"]).exists()
+
+    r2 = _post(app.port, "/api/corpus", {"persona_file": card})
+    assert [e["phrase"] for e in r2["entries"]] == ["测试台词A", "测试台词B"]
+    assert r2["bound"] is True                        # 已绑定到角色卡
+
+    import yaml
+    card_data = yaml.safe_load(Path(card).read_text(encoding="utf-8"))
+    assert card_data["corpus_file"].endswith(".corpus.json")

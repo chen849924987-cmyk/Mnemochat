@@ -121,6 +121,10 @@
   .persona-bar select { width:280px; }
   #editorFrame { width:100%; height:calc(100vh - 160px); border:1px solid var(--line);
                  border-radius:12px; background:var(--panel); }
+  .corpus-head, .corpus-row { display:grid; grid-template-columns: 80px 1.2fr 1.4fr 1.6fr 32px;
+                              gap:8px; align-items:center; margin-bottom:6px; }
+  .corpus-head { color:var(--dim); font-size:11.5px; padding:0 2px; }
+  .corpus-row input, .corpus-row select { padding:4px 8px; font-size:12.5px; }
 
   /* ---------- 设置 ---------- */
   .settings { max-width:1100px; margin:0 auto; }
@@ -255,8 +259,25 @@
   <div class="persona-bar">
     <span style="color:var(--dim);font-size:13px">正在编辑：</span>
     <select id="cardSel"></select>
+    <button class="ghost" id="btnCorpus" onclick="toggleCorpusPanel()">📚 语料库</button>
     <span style="color:var(--dim);font-size:12px">保存即热重载到运行中的机器人 ·
       机器人使用哪张卡在「设置」页选择</span>
+  </div>
+  <div id="corpusPanel" class="panel" style="display:none;padding:14px 18px;margin-bottom:12px">
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">
+      <h3 style="margin:0">📚 角色语料库</h3>
+      <span class="vishint" id="corpusPath" style="font-size:11.5px"></span>
+      <span style="flex:1"></span>
+      <button class="ghost" onclick="addCorpusRow()">＋ 添加条目</button>
+      <button class="ghost" onclick="saveCorpus()">保存语料库</button>
+    </div>
+    <p class="tip" style="margin:0 0 8px">每轮回复会从语料库抽样 4 条注入【语感参考】——
+      语料是风格参考不是台词，模型照语感组织句子。同一群 3 分钟内抽到的是固定的一批。</p>
+    <div class="corpus-head">
+      <span>类型</span><span>词条 / 台词</span><span>什么时候用</span><span>例句</span><span></span>
+    </div>
+    <div id="corpusRows" style="max-height:38vh;overflow:auto"></div>
+    <p class="tip" id="corpusCount" style="margin:6px 0 0"></p>
   </div>
   <iframe id="editorFrame" src="/editor"></iframe>
 </section>
@@ -754,10 +775,71 @@ async function applyPersona(file) {
   await loadPersonas();
   if (!$("tab-memory").hidden) loadUniverses();
 }
+/* ---------- 角色语料库 ---------- */
+let CORPUS = [];
+function toggleCorpusPanel() {
+  const p = $("corpusPanel");
+  const show = p.style.display === "none";
+  p.style.display = show ? "block" : "none";
+  if (show) loadCorpus();
+}
+async function loadCorpus() {
+  const card = $("cardSel").value;
+  if (!card) return;
+  const resp = await api("/api/corpus", {persona_file: card});
+  if (!resp.ok) return toast("✗ " + resp.error, "err");
+  CORPUS = resp.entries || [];
+  $("corpusPath").textContent = resp.path + (resp.exists ? "" : "（尚未创建，保存时生成）");
+  renderCorpus();
+}
+function renderCorpus() {
+  const box = $("corpusRows");
+  box.innerHTML = "";
+  CORPUS.forEach((e, i) => {
+    const row = document.createElement("div");
+    row.className = "corpus-row";
+    row.innerHTML = `
+      <input value="${escapeHtml(e.kind || "台词")}" data-f="kind" title="类型：台词/情绪/slang/pattern/reply/meme">
+      <input value="${escapeHtml(e.phrase || "")}" data-f="phrase" placeholder="词条或台词本体">
+      <input value="${escapeHtml(e.meaning || "")}" data-f="meaning" placeholder="什么时候用">
+      <input value="${escapeHtml(e.example || "")}" data-f="example" placeholder="一句真实语感的例句">
+      <button class="ghost" title="删除这条">✕</button>`;
+    row.querySelectorAll("input").forEach(inp => {
+      inp.oninput = () => { CORPUS[i][inp.dataset.f] = inp.value; updateCorpusCount(); };
+    });
+    row.querySelector("button").onclick = () => { CORPUS.splice(i, 1); renderCorpus(); };
+    box.appendChild(row);
+  });
+  updateCorpusCount();
+}
+function updateCorpusCount() {
+  const valid = CORPUS.filter(e => (e.phrase || "").trim()).length;
+  $("corpusCount").textContent =
+    `共 ${CORPUS.length} 条（有效 ${valid} 条；空词条与重复短语保存时自动跳过）`;
+}
+function addCorpusRow() {
+  CORPUS.push({kind: "台词", phrase: "", meaning: "", example: ""});
+  renderCorpus();
+  const rows = $("corpusRows");
+  rows.scrollTop = rows.scrollHeight;
+  const last = rows.lastElementChild;
+  if (last) last.querySelector('[data-f="phrase"]').focus();
+}
+async function saveCorpus() {
+  const card = $("cardSel").value;
+  if (!card) return toast("先在人格页选择角色卡", "err");
+  toast("保存语料库中…");
+  const resp = await api("/api/corpus_save",
+    {persona_file: card, entries: CORPUS, bind: true});
+  if (!resp.ok) return toast("✗ " + resp.error, "err");
+  toast(`✓ 语料库已保存（${resp.count} 条）并绑定到该角色卡`, "ok");
+  await loadCorpus();
+}
 $("cardSel").addEventListener("change", async e => {
   const resp = await api("/api/persona_select", {path: e.target.value});
   if (!resp.ok) return toast(resp.error, "err");
   $("editorFrame").src = "/editor?ts=" + Date.now();
+  if ($("corpusPanel").style.display !== "none") loadCorpus();
   toast("已切换到该角色卡（编辑用）", "ok");
 });
 
