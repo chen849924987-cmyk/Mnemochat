@@ -219,6 +219,7 @@ class SocialVisit(BaseModel):
     persona_file: str
     database: str = ""
     every_hours: float = 8
+    visit_count: int = 3      # 一次串门说几条
 
 
 class SocialConfig(BaseModel):

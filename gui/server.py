@@ -450,6 +450,70 @@ class GUIApp:
                 return {"ok": False, "error": f"绑定角色卡失败：{e}"}
         return {"ok": True, "path": str(path), "count": len(clean)}
 
+    def api_visit_relations(self, host_file: str) -> dict:
+        """某张主卡的来访关系：列出其它卡，标注谁会来、间隔、条数。"""
+        host = self._resolve(host_file)
+        if not host.exists():
+            return {"ok": False, "error": f"角色卡不存在：{host_file}"}
+        host_rel = f"personas/{host.name}"
+        out = []
+        for p in sorted((self.root / "personas").glob("*.yaml")):
+            rel = f"personas/{p.name}"
+            if rel == host_rel:
+                continue
+            try:
+                card = PersonaCard.load_yaml(p)
+            except Exception:
+                continue
+            social = card.social
+            targets = [t.lstrip("./") for t in social.visit_targets]
+            visiting = bool(social.visit_enabled and
+                            (not targets or host_rel in targets))
+            out.append({"file": rel, "name": card.name, "visiting": visiting,
+                        "every_hours": social.visit_every_hours,
+                        "count": social.visit_count,
+                        "bound_targets": len(targets)})
+        return {"ok": True, "host": host_rel, "items": out}
+
+    def api_visit_relation_save(self, host_file: str, guest_file: str,
+                                visiting: bool, every_hours: float,
+                                count: int) -> dict:
+        """设置"某张客卡是否来这张主卡的群串门"（写进客卡的 social）。"""
+        host = self._resolve(host_file)
+        guest = self._resolve(guest_file)
+        if not host.exists() or not guest.exists():
+            return {"ok": False, "error": "角色卡不存在"}
+        if host.resolve() == guest.resolve():
+            return {"ok": False, "error": "不能让一张卡来访问自己"}
+        host_rel = f"personas/{host.name}"
+        try:
+            data = load_persona(guest)
+            cur = dict(data.get("social") or {})
+            targets = [str(t) for t in (cur.get("visit_targets") or [])]
+            norm = [t.lstrip("./") for t in targets]
+            if visiting:
+                if host_rel not in norm:
+                    targets.append(host_rel)
+            else:
+                targets = [t for t, n in zip(targets, norm) if n != host_rel]
+            cur.update({
+                "visit_enabled": visiting or bool(targets),
+                "visit_targets": targets,
+                "visit_every_hours": float(every_hours or 12),
+                "visit_count": max(1, int(count or 3)),
+            })
+            # 保留旧字段以免破坏已有配置
+            cur.pop("visit_database", None)
+            data["social"] = cur
+            PersonaCard.model_validate(data)
+            state = (self.editor_state
+                     if Path(self.editor_state.card_path).resolve() == guest.resolve()
+                     else EditorState(guest))
+            save_persona(state, data)
+            return {"ok": True}
+        except Exception as e:
+            return {"ok": False, "error": f"{type(e).__name__}: {e}"}
+
     def api_persona_social(self, persona_file: str, social: dict) -> dict:
         """保存角色卡的串门设定（串门是人格属性，绑在卡上）。"""
         card = self._resolve(persona_file)
@@ -796,6 +860,16 @@ def make_handler(app: GUIApp) -> type[BaseHTTPRequestHandler]:
                     except Exception as e:
                         return self._json({"ok": False,
                                            "error": f"校验/保存失败：{e}"}, 400)
+                if self.path == "/api/visit_relations":
+                    return self._json(app.api_visit_relations(
+                        str(payload.get("host_file") or "")))
+                if self.path == "/api/visit_relation_save":
+                    return self._json(app.api_visit_relation_save(
+                        str(payload.get("host_file") or ""),
+                        str(payload.get("guest_file") or ""),
+                        bool(payload.get("visiting")),
+                        float(payload.get("every_hours") or 12),
+                        int(payload.get("count") or 3)))
                 if self.path == "/api/persona_social":
                     return self._json(app.api_persona_social(
                         str(payload.get("persona_file") or ""),

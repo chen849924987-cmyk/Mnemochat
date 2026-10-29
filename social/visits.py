@@ -58,33 +58,62 @@ async def perform_visit(host_pipe: "BotPipeline", host_store: "MemoryStore",
         system = build_reply_system(guest, recall, group, now, extra_hint=VISIT_HINT)
         user = (f"以下是这个群最近的聊天记录：\n{format_window(window) or '（还很安静）'}\n\n"
                 f"请以「{guest.name}」的身份发一条串门消息。")
-        text = (await guest_pipe.chat.achat([
-            {"role": "system", "content": system},
-            {"role": "user", "content": user},
-        ])).strip()
+        # 客人连说几条：每条都能看到自己刚说的话，像真人在群里刷屏聊天
+        count = max(1, int(getattr(visit, "visit_count", 3) or 3))
+        said: list[str] = []
+        for i in range(count):
+            convo = list(said)
+            prompt_user = user
+            if convo:
+                prompt_user += (chr(10) + chr(10) + "你刚才已经在这个群说过了："
+                                + chr(10) + chr(10).join(f"- {t}" for t in convo)
+                                + chr(10) + "接着说下一句（别重复上面的内容，可以补充、改口、追问）。")
+            text = (await guest_pipe.chat.achat([
+                {"role": "system", "content": system},
+                {"role": "user", "content": prompt_user},
+            ])).strip()
+            if not text:
+                break
+            said.append(text)
+            ts = clock.now()
+            msg_id = await guest_store.add_message(group, guest.name, guest.name, text, ts)
+            guest_pipe._pending.setdefault(group, []).append(MessageRecord(
+                id=msg_id, group_id=group, user_id=guest.name,
+                user_name=guest.name, content=text, ts=ts))
+            await guest_pipe.flush_ingest()
 
-        # 客库：这是客人自己的经历（进 ingest 缓冲，巩固时成为它的记忆）
-        ts = clock.now()
-        msg_id = await guest_store.add_message(group, guest.name, guest.name, text, ts)
-        guest_pipe._pending.setdefault(group, []).append(MessageRecord(
-            id=msg_id, group_id=group, user_id=guest.name,
-            user_name=guest.name, content=text, ts=ts))
-        await guest_pipe.flush_ingest()
+        if not said:
+            return {"guest": guest.name, "text": "", "reply": None,
+                    "guest_db": guest_cfg.database, "host": host_pipe.persona.name,
+                    "lines": []}
+        text = said[-1]
 
         # 主库：作为"来自客人的消息"走完整管线（记录 + 可选接话 + 入库）
         reply = await host_pipe.on_user_message(
             group, guest.name, guest.name, text,
             force_reply=cfg.social.host_replies)
 
+        # 主卡的回应也要进客库——客人得记得"那天他是怎么回我的"
+        if reply:
+            rts = clock.now()
+            rid = await guest_store.add_message(
+                group, host_pipe.persona.name, host_pipe.persona.name, reply, rts)
+            guest_pipe._pending.setdefault(group, []).append(MessageRecord(
+                id=rid, group_id=group, user_id=host_pipe.persona.name,
+                user_name=host_pipe.persona.name, content=reply, ts=rts))
+            await guest_pipe.flush_ingest()
+
         # QQ 顶号模式：适配器注入了群发送器 → 客人发言与主卡接话都经同一账号发出
         sender = getattr(host_pipe, "social_sender", None)
         if sender is not None:
-            out = f"【{guest.name}】{text}" if cfg.social.prefix_guest_name else text
-            await sender(group, out)
+            for line in said:
+                out = (f"【{guest.name}】{line}"
+                       if cfg.social.prefix_guest_name else line)
+                await sender(group, out)
             if reply:
                 await sender(group, reply)
 
-        return {"guest": guest.name, "text": text, "reply": reply,
+        return {"guest": guest.name, "text": text, "lines": said, "reply": reply,
                 "guest_db": guest_cfg.database,
                 "host": host_pipe.persona.name}
     finally:
@@ -120,11 +149,17 @@ def effective_visits(cfg) -> list:
         social = card.social
         if not social.visit_enabled:
             continue
-        db = social.visit_database or str(
-            Path(cfg.database).parent / f"memory_{p.stem}.db")
+        # 关系绑定：填了目标就只去那几张卡的群；留空表示谁都可以
+        if social.visit_targets:
+            active_rel = Path(cfg.persona_file).as_posix().lstrip("./")
+            if active_rel not in [t.lstrip("./") for t in social.visit_targets]:
+                continue
+        # 客卡永远用自己的记忆库
+        db = str(Path(cfg.database).parent / f"memory_{p.stem}.db")
         rel = f"personas/{p.name}"
         out.append(SocialVisit(persona_file=rel, database=db,
-                               every_hours=social.visit_every_hours))
+                               every_hours=social.visit_every_hours,
+                               visit_count=max(1, int(social.visit_count or 3))))
         seen.add(rel)
     for v in getattr(cfg.social, "visits", []) or []:
         if v.persona_file not in seen:

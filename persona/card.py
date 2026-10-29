@@ -26,16 +26,21 @@ class PersonaBoundary(BaseModel):
 
 
 class PersonaSocial(BaseModel):
-    """角色卡自带的串门设定：这张卡是否作为客人出现在其他卡的群里。
+    """角色卡自带的串门设定：这张卡作为客人，会去哪些卡的群里聊几句。
 
-    串门属于"这个角色想不想去串门"的人格属性，因此绑在角色卡上而不是全局配置；
-    config.social 只保留全局开关（enabled / host_replies / prefix_guest_name）。"""
+    串门语义：另一个角色临时"顶号"出场，以自己的记忆聊上几条，
+    然后双方各自把这次互动记进自己的记忆宇宙。
+    客卡永远用**自己的**记忆库（data/memory_<卡名>.db），不与他人共用。
+
+    visit_targets 为空 = 对任何主卡都可来访（兼容旧配置）；
+    填了具体卡文件 = 只去这些卡的群里串门（显式关系绑定）。"""
 
     model_config = ConfigDict(extra="ignore")
 
     visit_enabled: bool = False
     visit_every_hours: float = 12
-    visit_database: str = ""   # 留空 = 自动 data/memory_<卡名>.db（独立记忆宇宙）
+    visit_count: int = 3               # 一次串门说几条
+    visit_targets: list[str] = Field(default_factory=list)   # 绑定拜访对象（卡文件）
 
 
 class PersonaCard(BaseModel):
