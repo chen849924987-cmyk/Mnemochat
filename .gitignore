@@ -10,3 +10,4 @@ config.yaml
 data/
 dist/
 dist_new/
+tmp_cfg.json
